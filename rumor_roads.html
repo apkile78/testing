@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rumor Roads</title>
+<style>
+:root{--bg:#0b0f14;--panel:#131a22;--line:#263241;--ink:#dbe6f0;--dim:#8fa3b8;--gold:#e5b567;--good:#7fd18b;--bad:#e57373;--blue:#6fb3e0}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,Segoe UI,sans-serif}
+header{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;gap:14px;align-items:baseline;flex-wrap:wrap}
+h1{margin:0;font-size:20px;letter-spacing:.5px}.tag{color:var(--dim);font-size:13px}
+main{display:grid;grid-template-columns:minmax(300px,1fr) 380px;gap:14px;padding:14px;max-width:1200px;margin:auto}
+@media(max-width:900px){main{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px}
+h2{margin:0 0 8px;font-size:15px;color:var(--gold)}
+button{background:#1c2733;color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:7px 10px;cursor:pointer;font:inherit}
+button:hover{border-color:var(--blue)}button:disabled{opacity:.45;cursor:not-allowed}
+select,input{background:#0f151c;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:6px;font:inherit}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0}
+.small{font-size:12.5px;color:var(--dim)}
+#log{height:250px;overflow:auto;font-size:13px}
+#log div{padding:3px 0;border-bottom:1px dashed #1e2833}
+.good{color:var(--good)}.bad{color:var(--bad)}.gold{color:var(--gold)}.blue{color:var(--blue)}
+table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:5px;border-bottom:1px solid var(--line);text-align:left}
+.dead{filter:grayscale(1)}
+#modal{position:fixed;inset:0;background:#000a;display:none;place-items:center}
+#modal .card{max-width:560px;width:92%}
+</style>
+</head>
+<body>
+<header><h1>RUMOR ROADS</h1><span class="tag">An open-world RPG where information is currency.</span></header>
+<main>
+<section>
+<div class="card">
+<h2>World</h2>
+<table id="towns"></table>
+</div>
+<div class="card" style="margin-top:12px">
+<h2>Actions</h2>
+<div class="row">
+<select id="town"></select>
+<button id="travel">Travel</button>
+<button id="listen">Listen</button>
+<button id="investigate">Investigate</button>
+<button id="trade">Trade rumor</button>
+<button id="spread">Spread rumor</button>
+<button id="rest">Rest</button>
+</div>
+<div class="small">Travel costs days and can be dangerous. Permadeath is enabled.</div>
+</div>
+<div class="card" style="margin-top:12px">
+<h2>Journal</h2>
+<div id="log"></div>
+</div>
+</section>
+<aside>
+<div class="card">
+<h2>You</h2>
+<div id="stats"></div>
+</div>
+<div class="card" style="margin-top:12px">
+<h2>Known Rumors</h2>
+<div id="rumors"></div>
+</div>
+<div class="card" style="margin-top:12px">
+<h2>Factions</h2>
+<div id="factions"></div>
+</div>
+</aside>
+</main>
+<div id="modal"><div class="card"><h2 id="mtitle"></h2><div id="mbody"></div><div class="row" style="margin-top:10px"><button id="mclose">Close</button></div></div></div>
+<script>
+const TOWNS=[
+ {id:'ashford',name:'Ashford',x:0,factions:['Guild','Crown'],wealth:60,unrest:10,known:false},
+ {id:'bracken',name:'Bracken',x:1,factions:['Guild','Cult'],wealth:45,unrest:30,known:false},
+ {id:'cinder',name:'Cinder',x:2,factions:['Crown','Cult'],wealth:75,unrest:45,known:false},
+ {id:'dunmere',name:'Dunmere',x:3,factions:['Guild','Crown','Cult'],wealth:90,unrest:20,known:false}
+];
+const FACTIONS={
+ Guild:{name:'Merchant Guild',power:55,morality:0,relations:{Crown:20,Cult:-40}},
+ Crown:{name:'Crown Wardens',power:70,morality:20,relations:{Guild:20,Cult:-60}},
+ Cult:{name:'Ashen Cult',power:40,morality:-50,relations:{Guild:-40,Crown:-60}}
+};
+const RUMOR_POOL=[
+ {id:'mine',text:'The northern mine will reopen within days.',effect:t=>{t.wealth+=18;return 'Trade confidence rises in '+t.name+'.'},value:35},
+ {id:'grain',text:'A grain convoy was diverted to Cinder.',effect:t=>{t.unrest+=12;t.wealth-=8;return 'Food anxiety grows in '+t.name+'.'},value:25},
+ {id:'cult',text:'Ashen Cult agents are recruiting in the lower quarter.',effect:t=>{t.unrest+=18;return 'Fear of the Cult spreads in '+t.name+'.'},value:30},
+ {id:'tax',text:'The Crown plans a new road tariff.',effect:t=>{t.wealth-=10;FACTIONS.Crown.power+=4;return 'Merchants resent the Crown in '+t.name+'.'},value:28},
+ {id:'plague',text:'A sickness may be moving along the river road.',effect:t=>{t.unrest+=15;t.wealth-=6;return 'Panic spreads in '+t.name+'.'},value:32},
+ {id:'heir',text:'A hidden heir is sheltered by the Guild.',effect:()=>{FACTIONS.Guild.power+=8;FACTIONS.Crown.power-=5;return 'The Guild gains legitimacy.'},value:50},
+ {id:'raid',text:'Bandits intend to strike Dunmere before the next moon.',effect:t=>{t.unrest+=22;return 'Dunmere braces for a raid.'},value:40}
+];
+let S;
+function newGame(){
+ S={day:1,gold:40,reputation:10,truth:100,alive:true,loc:'ashford',rumors:[],verified:{},daysWithoutFood:0,actionsLeft:3};
+ TOWNS.forEach(t=>{t.wealth=60;t.unrest=10;t.known=false});
+ Object.keys(FACTIONS).forEach(k=>{FACTIONS[k].power=Math.max(20,FACTIONS[k].power);FACTIONS[k].morality=k==='Cult'?-50:k==='Crown'?20:0});
+ log('You arrive in Ashford with 40 gold and no reputation. Every rumor you hear may be true, false, or profitable.','gold');
+ discover('ashford'); render(); modal('How to win','Become indispensable. Raise any faction above 85 power, or survive to Day 40 while keeping at least one faction above 60. If your reputation falls below -20, or you die, the run ends.');
+}
+function log(msg,cls=''){const d=document.createElement('div');d.innerHTML=msg;if(cls)d.className=cls;document.getElementById('log').prepend(d);}
+function discover(id){const t=TOWNS.find(x=>x.id===id);if(!t.known){t.known=true;log('You discover <b>'+t.name+'</b>.','blue');}}
+function rumor(){const pool=RUMOR_POOL.filter(r=>!S.rumors.some(x=>x.id===r.id));return pool[Math.floor(Math.random()*pool.length)];}
+function render(){
+ document.getElementById('stats').innerHTML=`<table>
+ <tr><td>Day</td><td>${S.day}</td></tr>
+ <tr><td>Gold</td><td class="gold">${S.gold}</td></tr>
+ <tr><td>Location</td><td>${TOWNS.find(t=>t.id===S.loc).name}</td></tr>
+ <tr><td>Reputation</td><td class="${S.reputation<0?'bad':'good'}">${S.reputation}</td></tr>
+ <tr><td>Accuracy</td><td>${S.truth}%</td></tr>
+ <tr><td>Actions left</td><td>${S.actionsLeft}</td></tr></table>`;
+ document.getElementById('towns').innerHTML='<tr><th>Town</th><th>Wealth</th><th>Unrest</th><th>Status</th></tr>'+TOWNS.map(t=>`<tr><td>${t.name}${t.id===S.loc?' <span class="blue">(here)</span>':''}</td><td>${t.wealth}</td><td class="${t.unrest>60?'bad':''}">${t.unrest}</td><td>${t.known?'Known':'Unknown'}</td></tr>`).join('');
+ document.getElementById('rumors').innerHTML=S.rumors.length?S.rumors.map(r=>`<div style="border-bottom:1px dashed #1e2833;padding:5px 0"><b>${r.text}</b><br><span class="small">${r.verified?'<span class="good">Verified</span>':'Unverified'} · est. value ${r.value}</span></div>`).join(''):'<div class="small">You know nothing worth selling yet.</div>';
+ document.getElementById('factions').innerHTML=Object.entries(FACTIONS).map(([k,f])=>`<div style="margin-bottom:7px"><b>${f.name}</b><br><span class="small">Power ${f.power} · Morality ${f.morality}</span></div>`).join('');
+ const sel=document.getElementById('town');sel.innerHTML=TOWNS.map(t=>`<option value="${t.id}" ${t.id===S.loc?'selected':''}>${t.name}</option>`).join('');
+ document.querySelectorAll('button').forEach(b=>b.disabled=!S.alive||S.actionsLeft<=0&&b.id!=='rest'&&b.id!=='travel');
+}
+function modal(title,body){document.getElementById('mtitle').textContent=title;document.getElementById('mbody').innerHTML=body;document.getElementById('modal').style.display='grid';}
+document.getElementById('mclose').onclick=()=>document.getElementById('modal').style.display='none';
+function useAction(){if(S.actionsLeft<=0){log('No actions remain. Rest to advance the day.','bad');return false}S.actionsLeft--;return true}
+function endDay(){
+ S.day++;S.actionsLeft=3;
+ TOWNS.forEach(t=>{t.unrest=Math.max(0,t.unrest-3+Math.floor(Math.random()*5));t.wealth=Math.max(10,t.wealth+Math.floor(Math.random()*7)-3)});
+ Object.values(FACTIONS).forEach(f=>f.power=Math.max(5,Math.min(100,f.power+Math.floor(Math.random()*5)-2)));
+ if(S.gold<5){S.daysWithoutFood++;if(S.daysWithoutFood>=3){die('You starve in a roadside ditch. Information could not be eaten.');return}}else S.daysWithoutFood=0;
+ if(S.day>=40)checkWin();
+ if(Math.random()<.12&&S.reputation<0){die('A faction you deceived sends killers after you.');return}
+ render();
+}
+function die(reason){S.alive=false;render();modal('RUN ENDED',`<p class="bad">${reason}</p><p>Days survived: ${S.day}. Gold: ${S.gold}. Reputation: ${S.reputation}.</p><button onclick="newGame()">Start a new life</button>`);}
+function checkWin(){
+ const top=Math.max(...Object.values(FACTIONS).map(f=>f.power));
+ if(top>=85||S.day>=40&&top>=60){S.alive=false;render();modal('VICTORY',`<p class="good">You have become the realm’s indispensable broker of truth and lies.</p><p>Days: ${S.day}. Gold: ${S.gold}. Reputation: ${S.reputation}.</p><button onclick="newGame()">New run</button>`);}
+}
+document.getElementById('travel').onclick=()=>{
+ const dest=document.getElementById('town').value;if(dest===S.loc)return;
+ if(!useAction())return;
+ const risk=.06+(TOWNS.find(t=>t.id===dest).unrest/300);
+ if(Math.random()<risk){die('Bandits ambush you on the road. Your secrets die with you.');return}
+ S.loc=dest;S.gold=Math.max(0,S.gold-2);discover(dest);log('You travel to <b>'+TOWNS.find(t=>t.id===dest).name+'</b>.','blue');render();
+};
+document.getElementById('listen').onclick=()=>{
+ if(!useAction())return;const r=rumor();
+ if(!r){log('You hear only repeated gossip; no new rumor emerges.','dim');return}
+ const falseChance=Math.max(.08,.35-S.reputation/200);
+ const isTrue=Math.random()>falseChance;
+ S.rumors.push({...r,verified:false,isTrue});
+ log('You hear: “'+r.text+'” <span class="small">(unverified)</span>');
+};
+document.getElementById('investigate').onclick=()=>{
+ if(!useAction())return;const un=S.rumors.filter(r=>!r.verified);
+ if(!un.length){log('You have no unverified rumors to investigate.','dim');return}
+ const r=un[Math.floor(Math.random()*un.length)];const cost=5;
+ if(S.gold<cost){log('Investigation costs 5 gold; you cannot afford it.','bad');return}
+ S.gold-=cost;r.verified=true;
+ if(r.isTrue){S.truth=Math.min(100,S.truth+4);S.reputation+=2;log('You verify: “'+r.text+'” <span class="good">TRUE</span>.','good')}
+ else{S.truth=Math.max(0,S.truth-6);S.reputation-=3;log('You discover the rumor is <span class="bad">FALSE</span>: “'+r.text+'”.','bad')}
+ render();
+};
+document.getElementById('trade').onclick=()=>{
+ if(!useAction())return;const t=TOWNS.find(x=>x.id===S.loc);const known=S.rumors.filter(r=>!t.knownRumors?.includes(r.id));
+ if(!S.rumors.length){log('You have no rumor to sell.','dim');return}
+ const r=S.rumors[Math.floor(Math.random()*S.rumors.length)];
+ let price=Math.round(r.value*(t.wealth/60)*(r.verified?1.4:.7)*(1+t.unrest/150));
+ price=Math.max(3,price);S.gold+=price;t.knownRumors=(t.knownRumors||[]).concat(r.id);
+ S.rumors=S.rumors.filter(x=>x.id!==r.id);
+ if(r.verified&&r.isTrue)S.reputation+=1;
+ if(!r.verified&&Math.random()<.4){S.reputation-=2;log('The buyer later learns your rumor was unreliable.','bad')}
+ log(`You sell “${r.text}” in ${t.name} for <span class="gold">${price} gold</span>.`);
+ if(r.isTrue)r.effect(t);
+ render();
+};
+document.getElementById('spread').onclick=()=>{
+ if(!useAction())return;const t=TOWNS.find(x=>x.id===S.loc);
+ if(!S.rumors.length){log('You have no rumor to spread.','dim');return}
+ const r=S.rumors[Math.floor(Math.random()*S.rumors.length)];
+ S.rumors=S.rumors.filter(x=>x.id!==r.id);
+ if(r.isTrue){r.effect(t);S.reputation+=1;log(`You spread a true rumor in ${t.name}. ${r.effect(t)}`,'good')}
+ else{t.unrest+=14;S.reputation-=4;S.truth=Math.max(0,S.truth-5);log(`You spread a false rumor in ${t.name}. Unrest surges and your credibility suffers.`,'bad')}
+ if(t.unrest>75){const f=Object.keys(FACTIONS)[Math.floor(Math.random()*3)];FACTIONS[f].power-=6;log(`${t.name} erupts in unrest. ${FACTIONS[f].name} loses influence.`,'bad')}
+ render();
+};
+document.getElementById('rest').onclick=()=>{log('You rest. A new day begins.');endDay();};
+newGame();
+</script>
+</body>
+</html>

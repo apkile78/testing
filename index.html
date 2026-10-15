@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ashfall: Last Signal</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #0b0d10;
+    color: #d8e0e6;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    display: flex;
+    min-height: 100vh;
+    align-items: center;
+    justify-content: center;
+  }
+  #game {
+    width: min(1100px, 98vw);
+    border: 1px solid #263038;
+    border-radius: 10px;
+    background: #11151a;
+    padding: 14px;
+    box-shadow: 0 20px 60px #000a;
+  }
+  h1 {
+    margin: 0 0 6px;
+    font-size: 22px;
+    letter-spacing: 2px;
+    color: #ffce6b;
+  }
+  .sub { color: #7d8b96; font-size: 12px; margin-bottom: 12px; }
+  #wrap { display: flex; gap: 14px; }
+  #left { flex: 1; min-width: 0; }
+  canvas {
+    width: 100%;
+    display: block;
+    image-rendering: pixelated;
+    border: 1px solid #2c3740;
+    border-radius: 6px;
+    background: #05070a;
+  }
+  #side {
+    width: 300px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .panel {
+    background: #161c22;
+    border: 1px solid #2a343d;
+    border-radius: 8px;
+    padding: 10px;
+  }
+  .panel h2 {
+    margin: 0 0 8px;
+    font-size: 13px;
+    color: #9fb2c0;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .bar {
+    height: 12px;
+    background: #0a0e12;
+    border: 1px solid #2a343d;
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 4px 0 8px;
+  }
+  .fill { height: 100%; transition: width .15s linear; }
+  .row { display: flex; justify-content: space-between; font-size: 12px; color: #a9b8c3; }
+  #log {
+    height: 180px;
+    overflow-y: auto;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  #log div { padding: 2px 0; border-bottom: 1px solid #1d242b; }
+  .good { color: #7fd88f; }
+  .bad { color: #ff7a7a; }
+  .warn { color: #ffce6b; }
+  .info { color: #8fb8d8; }
+  #controls { font-size: 12px; color: #7d8b96; }
+  kbd {
+    background: #202830;
+    border: 1px solid #39434d;
+    border-radius: 4px;
+    padding: 1px 5px;
+    color: #d8e0e6;
+    font-size: 11px;
+  }
+  #overlay {
+    position: fixed;
+    inset: 0;
+    background: #05070ad9;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+  }
+  #overlay.show { display: flex; }
+  #modal {
+    width: min(560px, 92vw);
+    background: #12171c;
+    border: 1px solid #38434e;
+    border-radius: 12px;
+    padding: 24px;
+    text-align: center;
+  }
+  #modal h2 { margin: 0 0 10px; color: #ffce6b; }
+  #modal p { color: #a9b8c3; font-size: 14px; line-height: 1.6; }
+  button {
+    background: #ffce6b;
+    border: none;
+    color: #101418;
+    font-family: inherit;
+    font-weight: bold;
+    padding: 10px 18px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  button:hover { filter: brightness(1.1); }
+  @media (max-width: 820px) {
+    #wrap { flex-direction: column; }
+    #side { width: 100%; }
+    #log { height: 120px; }
+  }
+</style>
+</head>
+<body>
+<div id="game">
+  <h1>ASHFALL: LAST SIGNAL</h1>
+  <div class="sub">A compact survival roguelike — scavenge, fight, endure, and reach the radio tower.</div>
+
+  <div id="wrap">
+    <div id="left">
+      <canvas id="canvas" width="720" height="480"></canvas>
+      <div id="controls">
+        <kbd>WASD</kbd> / <kbd>Arrows</kbd> move ·
+        <kbd>E</kbd> interact ·
+        <kbd>F</kbd> attack ·
+        <kbd>1</kbd> eat ·
+        <kbd>2</kbd> drink ·
+        <kbd>3</kbd> use medkit ·
+        <kbd>R</kbd> restart
+      </div>
+    </div>
+
+    <div id="side">
+      <div class="panel">
+        <h2>Survivor</h2>
+        <div class="row"><span>Health</span><span id="hpText"></span></div>
+        <div class="bar"><div id="hpFill" class="fill" style="background:#ff5f5f"></div></div>
+
+        <div class="row"><span>Food</span><span id="foodText"></span></div>
+        <div class="bar"><div id="foodFill" class="fill" style="background:#ffce6b"></div></div>
+
+        <div class="row"><span>Water</span><span id="waterText"></span></div>
+        <div class="bar"><div id="waterFill" class="fill" style="background:#5fb8ff"></div></div>
+
+        <div class="row"><span>Day</span><span id="dayText"></span></div>
+        <div class="row"><span>Turns</span><span id="turnText"></span></div>
+        <div class="row"><span>Radio progress</span><span id="goalText"></span></div>
+      </div>
+
+      <div class="panel">
+        <h2>Inventory</h2>
+        <div class="row"><span>Rations</span><span id="invFood"></span></div>
+        <div class="row"><span>Water bottles</span><span id="invWater"></span></div>
+        <div class="row"><span>Medkits</span><span id="invMed"></span></div>
+        <div class="row"><span>Scrap</span><span id="invScrap"></span></div>
+        <div class="row"><span>Weapon</span><span id="invWeapon"></span></div>
+      </div>
+
+      <div class="panel">
+        <h2>Log</h2>
+        <div id="log"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="overlay" class="show">
+  <div id="modal">
+    <h2 id="modalTitle">ASHFALL: LAST SIGNAL</h2>
+    <p id="modalText">
+      The world ended quietly. You woke in a ruined district with a broken radio,
+      a hunger that will not wait, and one signal still broadcasting from the old tower.<br><br>
+      Find <b>5 radio parts</b>, survive the ash, and reach the tower.
+    </p>
+    <button id="startBtn">BEGIN SURVIVAL</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const W = 48, H = 32, TILE = 15;
+  const canvas = document.getElementById("canvas");
+  const ctx = canvas.getContext("2d");
+  const logEl = document.getElementById("log");
+  const overlay = document.getElementById("overlay");
+  const modalTitle = document.getElementById("modalTitle");
+  const modalText = document.getElementById("modalText");
+  const startBtn = document.getElementById("startBtn");
+
+  const GOAL_PARTS = 5;
+  let map, seen, enemies, items, player, turn, running, best = 0;
+
+  const rnd = (n) => Math.floor(Math.random() * n);
+  const choice = (a) => a[rnd(a.length)];
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+  function log(text, cls = "info") {
+    const d = document.createElement("div");
+    d.className = cls;
+    d.textContent = text;
+    logEl.prepend(d);
+    while (logEl.children.length > 60) logEl.lastChild.remove();
+  }
+
+  function makeMap() {
+    map = Array.from({ length: H }, () => Array(W).fill("."));
+    seen = Array.from({ length: H }, () => Array(W).fill(false));
+
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < W; x++)
+        if (x === 0 || y === 0 || x === W - 1 || y === H - 1) map[y][x] = "#";
+
+    // Ruined buildings
+    for (let i = 0; i < 16; i++) {
+      const w = 5 + rnd(9), h = 4 + rnd(6);
+      const x = 2 + rnd(W - w - 4), y = 2 + rnd(H - h - 4);
+      for (let yy = y; yy < y + h; yy++)
+        for (let xx = x; xx < x + w; xx++)
+          map[yy][xx] = (xx === x || yy === y || xx === x + w - 1 || yy === y + h - 1) ? "#" : ".";
+      // Door
+      map[y + Math.floor(h / 2)][x] = ".";
+    }
+
+    // Ash patches and rubble
+    for (let i = 0; i < 130; i++) {
+      const x = 1 + rnd(W - 2), y = 1 + rnd(H - 2);
+      if (map[y][x] === ".") map[y][x] = choice(["~", ",", ";"]);
+    }
+
+    // Radio tower
+    const tx = W - 4, ty = Math.floor(H / 2);
+    for (let y = ty - 2; y <= ty + 2; y++)
+      for (let x = tx - 2; x <= tx + 2; x++)
+        if (x > 0 && y > 0 && x < W - 1 && y < H - 1) map[y][x] = "T";
+    map[ty][tx - 3] = ".";
+
+    return { tx, ty };
+  }
+
+  function spawnEntities(tower) {
+    enemies = [];
+    items = [];
+
+    player = {
+      x: 3, y: 3,
+      hp: 100, maxHp: 100,
+      food: 80, water: 80,
+      atk: 8,
+      weapon: "Pipe",
+      parts: 0,
+      inv: { food: 2, water: 2, med: 1, scrap: 0 }
+    };
+
+    for (let i = 0; i < 14; i++) {
+      const p = freeTile();
+      items.push({ x: p.x, y: p.y, type: choice(["food", "water", "med", "scrap", "part"]) });
+    }
+    for (let i = 0; i < 6; i++) {
+      const p = freeTile();
+      items.push({ x: p.x, y: p.y, type: "weapon" });
+    }
+
+    for (let i = 0; i < 18; i++) {
+      const p = freeTile();
+      enemies.push({
+        x: p.x, y: p.y,
+        hp: 18 + rnd(14),
+        maxHp: 30,
+        atk: 4 + rnd(5),
+        kind: choice(["Ash Hound", "Husk", "Scavenger", "Weeper"])
+      });
+    }
+  }
+
+  function freeTile() {
+    while (true) {
+      const x = 1 + rnd(W - 2), y = 1 + rnd(H - 2);
+      if (map[y][x] === "." && !(player && player.x === x && player.y === y)) return { x, y };
+    }
+  }
+
+  function startGame() {
+    const tower = makeMap();
+    spawnEntities(tower);
+    turn = 1;
+    running = true;
+    logEl.innerHTML = "";
+    log("You awaken beneath grey rain. The tower signal is faint but alive.", "warn");
+    overlay.classList.remove("show");
+    updateUI();
+    draw();
+  }
+
+  function updateUI() {
+    document.getElementById("hpText").textContent = `${Math.max(0, player.hp)}/${player.maxHp}`;
+    document.getElementById("hpFill").style.width = clamp(player.hp / player.maxHp * 100, 0, 100) + "%";
+    document.getElementById("foodText").textContent = Math.max(0, Math.round(player.food)) + "%";
+    document.getElementById("foodFill").style.width = clamp(player.food, 0, 100) + "%";
+    document.getElementById("waterText").textContent = Math.max(0, Math.round(player.water)) + "%";
+    document.getElementById("waterFill").style.width = clamp(player.water, 0, 100) + "%";
+    document.getElementById("dayText").textContent = Math.floor((turn - 1) / 40) + 1;
+    document.getElementById("turnText").textContent = turn;
+    document.getElementById("goalText").textContent = `${player.parts}/${GOAL_PARTS}`;
+    document.getElementById("invFood").textContent = player.inv.food;
+    document.getElementById("invWater").textContent = player.inv.water;
+    document.getElementById("invMed").textContent = player.inv.med;
+    document.getElementById("invScrap").textContent = player.inv.scrap;
+    document.getElementById("invWeapon").textContent = `${player.weapon} (${player.atk} dmg)`;
+  }
+
+  function tileAt(x, y) {
+    return (x < 0 || y < 0 || x >= W || y >= H) ? "#" : map[y][x];
+  }
+
+  function walkable(x, y) {
+    const t = tileAt(x, y);
+    return t !== "#" && t !== "T";
+  }
+
+  function enemyAt(x, y) {
+    return enemies.find(e => e.x === x && e.y === y);
+  }
+
+  function itemAt(x, y) {
+    return items.find(i => i.x === x && i.y === y);
+  }
+
+  function move(dx, dy) {
+    if (!running) return;
+    const nx = player.x + dx, ny = player.y + dy;
+    const enemy = enemyAt(nx, ny);
+
+    if (enemy) {
+      attack(enemy);
+      endTurn();
+      return;
+    }
+
+    if (walkable(nx, ny)) {
+      player.x = nx;
+      player.y = ny;
+      const item = itemAt(nx, ny);
+      if (item) pickup(item);
+      checkTower();
+    } else {
+      log("A collapsed wall blocks your path.", "info");
+    }
+    endTurn();
+  }
+
+  function attack(enemy) {
+    const dmg = player.atk + rnd(4);
+    enemy.hp -= dmg;
+    log(`You strike the ${enemy.kind} for ${dmg} damage.`, "good");
+
+    if (enemy.hp <= 0) {
+      enemies = enemies.filter(e => e !== enemy);
+      player.inv.scrap += 1 + rnd(3);
+      if (Math.random() < 0.3) player.inv.food++;
+      if (Math.random() < 0.25) player.inv.water++;
+      log(`The ${enemy.kind} falls. You salvage supplies.`, "good");
+    } else {
+      const dmgToPlayer = enemy.atk + rnd(3);
+      player.hp -= dmgToPlayer;
+      log(`The ${enemy.kind} hits you for ${dmgToPlayer}.`, "bad");
+    }
+  }
+
+  function pickup(item) {
+    items = items.filter(i => i !== item);
+
+    switch (item.type) {
+      case "food":
+        player.inv.food++;
+        log("Found a sealed ration.", "good");
+        break;
+      case "water":
+        player.inv.water++;
+        log("Found a bottle of clean water.", "good");
+        break;
+      case "med":
+        player.inv.med++;
+        log("Found a medkit.", "good");
+        break;
+      case "scrap":
+        player.inv.scrap += 2 + rnd(4);
+        log("Collected salvage scrap.", "good");
+        break;
+      case "part":
+        player.parts++;
+        log(`RADIO PART RECOVERED — ${player.parts}/${GOAL_PARTS}.`, "warn");
+        break;
+      case "weapon":
+        if (Math.random() < 0.5) {
+          player.weapon = "Machete";
+          player.atk = 12;
+          log("You find a Machete. Damage increased.", "good");
+        } else {
+          player.weapon = "Rebar Club";
+          player.atk = 15;
+          log("You find a Rebar Club. Damage greatly increased.", "good");
+        }
+        break;
+    }
+  }
+
+  function interact() {
+    if (!running) return;
+    const around = [[0,0],[1,0],[-1,0],[0,1],[0,-1]];
+    let acted = false;
+
+    for (const [dx, dy] of around) {
+      const item = itemAt(player.x + dx, player.y + dy);
+      if (item) {
+        pickup(item);
+        acted = true;
+        break;
+      }
+    }
+
+    if (!acted) log("Nothing here to search.", "info");
+    endTurn();
+  }
+
+  function useItem(kind) {
+    if (!running) return;
+
+    if (kind === "food") {
+      if (player.inv.food <= 0) return log("No rations left.", "bad");
+      player.inv.food--;
+      player.food = clamp(player.food + 32, 0, 100);
+      player.hp = clamp(player.hp + 4, 0, player.maxHp);
+      log("You eat a ration. Hunger eases.", "good");
+    }
+
+    if (kind === "water") {
+      if (player.inv.water <= 0) return log("No water left.", "bad");
+      player.inv.water--;
+      player.water = clamp(player.water + 35, 0, 100);
+      log("You drink clean water.", "good");
+    }
+
+    if (kind === "med") {
+      if (player.inv.med <= 0) return log("No medkits left.", "bad");
+      player.inv.med--;
+      player.hp = clamp(player.hp + 40, 0, player.maxHp);
+      log("You use a medkit. Wounds close.", "good");
+    }
+
+    endTurn();
+  }
+
+  function enemyTurn() {
+    for (const e of enemies) {
+      const dx = Math.sign(player.x - e.x);
+      const dy = Math.sign(player.y - e.y);
+      const dist = Math.abs(player.x - e.x) + Math.abs(player.y - e.y);
+
+      if (dist === 1) {
+        const dmg = e.atk + rnd(3);
+        player.hp -= dmg;
+        log(`The ${e.kind} attacks for ${dmg}.`, "bad");
+        continue;
+      }
+
+      if (dist <= 9) {
+        const tryMoves = Math.abs(dx) >= Math.abs(dy)
+          ? [[dx, 0], [0, dy]]
+          : [[0, dy], [dx, 0]];
+
+        for (const [mx, my] of tryMoves) {
+          const nx = e.x + mx, ny = e.y + my;
+          if (walkable(nx, ny) && !enemyAt(nx, ny) && !(nx === player.x && ny === player.y)) {
+            e.x = nx;
+            e.y = ny;
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  function endTurn() {
+    if (!running) return;
+
+    turn++;
+    player.food -= 0.55;
+    player.water -= 0.75;
+
+    if (player.food <= 0) {
+      player.hp -= 1.4;
+      if (turn % 8 === 0) log("Starvation is draining you.", "bad");
+    }
+    if (player.water <= 0) {
+      player.hp -= 2.1;
+      if (turn % 8 === 0) log("Dehydration is killing you.", "bad");
+    }
+
+    if (turn % 25 === 0) {
+      const p = freeTile();
+      enemies.push({
+        x: p.x, y: p.y,
+        hp: 22 + rnd(18),
+        maxHp: 40,
+        atk: 5 + rnd(6),
+        kind: choice(["Ash Hound", "Husk", "Scavenger", "Weeper"])
+      });
+      log("Something new moves through the ash...", "warn");
+    }
+
+    enemyTurn();
+    updateUI();
+    draw();
+
+    if (player.hp <= 0) endGame(false);
+  }
+
+  function checkTower() {
+    const tower = { x: W - 4, y: Math.floor(H / 2) };
+    if (player.x === tower.x - 3 && player.y === tower.y) {
+      if (player.parts >= GOAL_PARTS) {
+        endGame(true);
+      } else {
+        log(`The tower is sealed. You need ${GOAL_PARTS - player.parts} more radio part(s).`, "warn");
+      }
+    }
+  }
+
+  function endGame(win) {
+    running = false;
+    const score = Math.floor(turn + player.parts * 100 + player.inv.scrap * 10 + (win ? 500 : 0));
+    best = Math.max(best, score);
+    localStorage.setItem("ashfall_best", best);
+
+    modalTitle.textContent = win ? "SIGNAL RESTORED" : "YOU DID NOT MAKE IT";
+    modalText.innerHTML = win
+      ? `You repaired the transmitter and sent the final signal.<br><br><b>Score:</b> ${score}<br><b>Best:</b> ${best}`
+      : `The ash takes another survivor.<br><br><b>Score:</b> ${score}<br><b>Best:</b> ${best}<br><b>Radio parts:</b> ${player.parts}/${GOAL_PARTS}`;
+    startBtn.textContent = "TRY AGAIN";
+    overlay.classList.add("show");
+  }
+
+  function draw() {
+    ctx.fillStyle = "#05070a";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const viewW = Math.floor(canvas.width / TILE);
+    const viewH = Math.floor(canvas.height / TILE);
+    const camX = clamp(player.x - Math.floor(viewW / 2), 0, W - viewW);
+    const camY = clamp(player.y - Math.floor(viewH / 2), 0, H - viewH);
+
+    for (let y = 0; y < viewH; y++) {
+      for (let x = 0; x < viewW; x++) {
+        const mx = x + camX, my = y + camY;
+        const t = tileAt(mx, my);
+        const px = x * TILE, py = y * TILE;
+
+        let color = "#1a2027";
+        if (t === "#") color = "#3a444d";
+        else if (t === "~") color = "#2b2f36";
+        else if (t === ",") color = "#232a31";
+        else if (t === ";") color = "#20262d";
+        else if (t === "T") color = "#6b4f22";
+
+        ctx.fillStyle = color;
+        ctx.fillRect(px, py, TILE - 1, TILE - 1);
+
+        // Fog of war
+        const dist = Math.abs(mx - player.x) + Math.abs(my - player.y);
+        if (dist > 10) {
+          ctx.fillStyle = "rgba(5,7,10,0.72)";
+          ctx.fillRect(px, py, TILE - 1, TILE - 1);
+        }
+      }
+    }
+
+    for (const item of items) {
+      const x = (item.x - camX) * TILE, y = (item.y - camY) * TILE;
+      if (x < -TILE || y < -TILE || x > canvas.width || y > canvas.height) continue;
+
+      const colors = {
+        food: "#ffce6b",
+        water: "#5fb8ff",
+        med: "#ff7a7a",
+        scrap: "#a9b8c3",
+        part: "#b58cff",
+        weapon: "#7fd88f"
+      };
+      ctx.fillStyle = colors[item.type] || "#fff";
+      ctx.fillRect(x + 4, y + 4, TILE - 9, TILE - 9);
+    }
+
+    for (const e of enemies) {
+      const x = (e.x - camX) * TILE, y = (e.y - camY) * TILE;
+      if (x < -TILE || y < -TILE || x > canvas.width || y > canvas.height) continue;
+
+      ctx.fillStyle = "#ff5f5f";
+      ctx.beginPath();
+      ctx.arc(x + TILE / 2, y + TILE / 2, TILE / 2 - 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#05070a";
+      ctx.fillRect(x + 3, y + TILE - 4, Math.max(0, (TILE - 6) * e.hp / e.maxHp), 2);
+    }
+
+    const px = (player.x - camX) * TILE, py = (player.y - camY) * TILE;
+    ctx.fillStyle = "#7fd88f";
+    ctx.fillRect(px + 2, py + 2, TILE - 5, TILE - 5);
+    ctx.fillStyle = "#05070a";
+    ctx.fillRect(px + 5, py + 6, 2, 2);
+    ctx.fillRect(px + TILE - 8, py + 6, 2, 2);
+  }
+
+  document.addEventListener("keydown", (e) => {
+    if (!running) {
+      if (e.key === "Enter") startGame();
+      return;
+    }
+
+    const k = e.key.toLowerCase();
+    if (["arrowup", "w"].includes(k)) { e.preventDefault(); move(0, -1); }
+    else if (["arrowdown", "s"].includes(k)) { e.preventDefault(); move(0, 1); }
+    else if (["arrowleft", "a"].includes(k)) { e.preventDefault(); move(-1, 0); }
+    else if (["arrowright", "d"].includes(k)) { e.preventDefault(); move(1, 0); }
+    else if (k === "e") interact();
+    else if (k === "f") {
+      const target = [[1,0],[-1,0],[0,1],[0,-1]]
+        .map(([dx,dy]) => enemyAt(player.x + dx, player.y + dy))
+        .find(Boolean);
+      if (target) { attack(target); endTurn(); }
+      else log("No enemy in reach.", "info");
+    }
+    else if (k === "1") useItem("food");
+    else if (k === "2") useItem("water");
+    else if (k === "3") useItem("med");
+    else if (k === "r") startGame();
+  });
+
+  startBtn.addEventListener("click", startGame);
+  best = parseInt(localStorage.getItem("ashfall_best") || "0", 10);
+})();
+</script>
+</body>
+</html>

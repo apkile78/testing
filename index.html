@@ -1,187 +1,200 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Rumor Roads</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AI-Collapse Survival Sandbox — Prototype</title>
 <style>
-:root{--bg:#0b0f14;--panel:#131a22;--line:#263241;--ink:#dbe6f0;--dim:#8fa3b8;--gold:#e5b567;--good:#7fd18b;--bad:#e57373;--blue:#6fb3e0}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,Segoe UI,sans-serif}
-header{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;gap:14px;align-items:baseline;flex-wrap:wrap}
-h1{margin:0;font-size:20px;letter-spacing:.5px}.tag{color:var(--dim);font-size:13px}
-main{display:grid;grid-template-columns:minmax(300px,1fr) 380px;gap:14px;padding:14px;max-width:1200px;margin:auto}
-@media(max-width:900px){main{grid-template-columns:1fr}}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px}
-h2{margin:0 0 8px;font-size:15px;color:var(--gold)}
-button{background:#1c2733;color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:7px 10px;cursor:pointer;font:inherit}
-button:hover{border-color:var(--blue)}button:disabled{opacity:.45;cursor:not-allowed}
-select,input{background:#0f151c;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:6px;font:inherit}
-.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0}
-.small{font-size:12.5px;color:var(--dim)}
-#log{height:250px;overflow:auto;font-size:13px}
-#log div{padding:3px 0;border-bottom:1px dashed #1e2833}
-.good{color:var(--good)}.bad{color:var(--bad)}.gold{color:var(--gold)}.blue{color:var(--blue)}
-table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:5px;border-bottom:1px solid var(--line);text-align:left}
-.dead{filter:grayscale(1)}
-#modal{position:fixed;inset:0;background:#000a;display:none;place-items:center}
-#modal .card{max-width:560px;width:92%}
+  html,body{margin:0;height:100%;overflow:hidden;background:#000;color:#d8e6ff;font-family:Inter,system-ui,sans-serif}
+  #renderCanvas{width:100%;height:100%;display:block;outline:none;touch-action:none}
+  .hud{position:fixed;left:16px;bottom:16px;z-index:10;background:rgba(4,10,20,.72);border:1px solid #2b6cb0;padding:12px 14px;border-radius:10px;min-width:270px;backdrop-filter:blur(6px)}
+  .bar{height:9px;background:#12233b;border-radius:6px;overflow:hidden;margin:4px 0 9px}
+  .fill{height:100%;width:100%;transition:width .15s}
+  .power{background:#57d0ff}.oxygen{background:#6ef2a5}.hull{background:#ffb457}.fuel{background:#ffd166}
+  .row{display:flex;justify-content:space-between;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#9fb6d4}
+  #objective{position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:10;background:rgba(4,10,20,.78);border:1px solid #2b6cb0;border-radius:10px;padding:10px 16px;max-width:min(760px,92vw);font-size:14px;text-align:center}
+  #prompt{position:fixed;left:50%;bottom:120px;transform:translateX(-50%);z-index:10;background:rgba(6,16,28,.85);border:1px solid #4c9aff;padding:8px 14px;border-radius:8px;display:none;font-size:14px}
+  #toast{position:fixed;top:70px;left:50%;transform:translateX(-50%);z-index:11;background:rgba(10,30,50,.9);border:1px solid #57d0ff;color:#e8f6ff;padding:10px 16px;border-radius:8px;opacity:0;transition:opacity .25s;pointer-events:none}
+  #start{position:fixed;inset:0;z-index:20;background:radial-gradient(circle at 50% 35%,#0b1c30,#01050a 70%);display:flex;align-items:center;justify-content:center;text-align:center;padding:24px}
+  .card{max-width:720px;border:1px solid #2b6cb0;background:rgba(3,10,20,.82);padding:28px;border-radius:14px}
+  h1{margin:0 0 8px;font-size:clamp(24px,4vw,38px);color:#e8f6ff}
+  p{color:#a9c1dc;line-height:1.55}
+  .keys{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;margin:18px 0;font-size:13px;color:#cfe2f7}
+  .keys div{background:#0a1728;border:1px solid #1e3d61;border-radius:8px;padding:8px}
+  button{background:#1a6ed8;border:0;color:white;font-weight:700;padding:12px 22px;border-radius:9px;cursor:pointer;font-size:15px}
+  button:hover{background:#2b82f0}
+  .tag{display:inline-block;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#57d0ff;border:1px solid #2b6cb0;padding:3px 8px;border-radius:99px;margin-bottom:12px}
 </style>
+<script src="https://cdn.babylonjs.com/babylon.js"></script>
 </head>
 <body>
-<header><h1>RUMOR ROADS</h1><span class="tag">An open-world RPG where information is currency.</span></header>
-<main>
-<section>
-<div class="card">
-<h2>World</h2>
-<table id="towns"></table>
+<canvas id="renderCanvas"></canvas>
+<div id="objective"><strong>Objective:</strong> Repair the habitat, salvage the derelict, descend to Earth, recover the AI core, and restore the relay.</div>
+<div id="prompt"></div>
+<div id="toast"></div>
+<div class="hud">
+  <div class="row"><span>Exosuit power</span><span id="powerText">100%</span></div><div class="bar"><div id="powerBar" class="fill power"></div></div>
+  <div class="row"><span>Life support</span><span id="oxygenText">100%</span></div><div class="bar"><div id="oxygenBar" class="fill oxygen"></div></div>
+  <div class="row"><span>Suit integrity</span><span id="hullText">100%</span></div><div class="bar"><div id="hullBar" class="fill hull"></div></div>
+  <div class="row"><span>Ship fuel</span><span id="fuelText">25%</span></div><div class="bar"><div id="fuelBar" class="fill fuel"></div></div>
+  <div class="row"><span>Salvage</span><span id="cargoText">0 / 5</span></div>
 </div>
-<div class="card" style="margin-top:12px">
-<h2>Actions</h2>
-<div class="row">
-<select id="town"></select>
-<button id="travel">Travel</button>
-<button id="listen">Listen</button>
-<button id="investigate">Investigate</button>
-<button id="trade">Trade rumor</button>
-<button id="spread">Spread rumor</button>
-<button id="rest">Rest</button>
-</div>
-<div class="small">Travel costs days and can be dangerous. Permadeath is enabled.</div>
-</div>
-<div class="card" style="margin-top:12px">
-<h2>Journal</h2>
-<div id="log"></div>
-</div>
-</section>
-<aside>
-<div class="card">
-<h2>You</h2>
-<div id="stats"></div>
-</div>
-<div class="card" style="margin-top:12px">
-<h2>Known Rumors</h2>
-<div id="rumors"></div>
-</div>
-<div class="card" style="margin-top:12px">
-<h2>Factions</h2>
-<div id="factions"></div>
-</div>
-</aside>
-</main>
-<div id="modal"><div class="card"><h2 id="mtitle"></h2><div id="mbody"></div><div class="row" style="margin-top:10px"><button id="mclose">Close</button></div></div></div>
+<div id="start"><div class="card">
+  <div class="tag">Early playable prototype</div>
+  <h1>Untitled AI-Collapse Survival Sandbox</h1>
+  <p>You wake alone in a failing orbital habitat above a collapsed Earth. Repair enough systems to survive, fly to a derelict for salvage, enter the atmosphere, recover a pre-collapse AI core, and restore a critical communications relay.</p>
+  <div class="keys">
+    <div><b>WASD</b> — move / fly</div><div><b>Mouse</b> — look</div><div><b>Shift</b> — sprint / boost</div>
+    <div><b>Space</b> — jump / ascend</div><div><b>Ctrl</b> — descend in ship</div><div><b>E</b> — interact / salvage</div>
+    <div><b>F</b> — flashlight</div><div><b>R</b> — repair nearby system</div><div><b>Esc</b> — release mouse</div>
+  </div>
+  <button id="play">Begin survival run</button>
+</div></div>
 <script>
-const TOWNS=[
- {id:'ashford',name:'Ashford',x:0,factions:['Guild','Crown'],wealth:60,unrest:10,known:false},
- {id:'bracken',name:'Bracken',x:1,factions:['Guild','Cult'],wealth:45,unrest:30,known:false},
- {id:'cinder',name:'Cinder',x:2,factions:['Crown','Cult'],wealth:75,unrest:45,known:false},
- {id:'dunmere',name:'Dunmere',x:3,factions:['Guild','Crown','Cult'],wealth:90,unrest:20,known:false}
-];
-const FACTIONS={
- Guild:{name:'Merchant Guild',power:55,morality:0,relations:{Crown:20,Cult:-40}},
- Crown:{name:'Crown Wardens',power:70,morality:20,relations:{Guild:20,Cult:-60}},
- Cult:{name:'Ashen Cult',power:40,morality:-50,relations:{Guild:-40,Crown:-60}}
-};
-const RUMOR_POOL=[
- {id:'mine',text:'The northern mine will reopen within days.',effect:t=>{t.wealth+=18;return 'Trade confidence rises in '+t.name+'.'},value:35},
- {id:'grain',text:'A grain convoy was diverted to Cinder.',effect:t=>{t.unrest+=12;t.wealth-=8;return 'Food anxiety grows in '+t.name+'.'},value:25},
- {id:'cult',text:'Ashen Cult agents are recruiting in the lower quarter.',effect:t=>{t.unrest+=18;return 'Fear of the Cult spreads in '+t.name+'.'},value:30},
- {id:'tax',text:'The Crown plans a new road tariff.',effect:t=>{t.wealth-=10;FACTIONS.Crown.power+=4;return 'Merchants resent the Crown in '+t.name+'.'},value:28},
- {id:'plague',text:'A sickness may be moving along the river road.',effect:t=>{t.unrest+=15;t.wealth-=6;return 'Panic spreads in '+t.name+'.'},value:32},
- {id:'heir',text:'A hidden heir is sheltered by the Guild.',effect:()=>{FACTIONS.Guild.power+=8;FACTIONS.Crown.power-=5;return 'The Guild gains legitimacy.'},value:50},
- {id:'raid',text:'Bandits intend to strike Dunmere before the next moon.',effect:t=>{t.unrest+=22;return 'Dunmere braces for a raid.'},value:40}
-];
-let S;
-function newGame(){
- S={day:1,gold:40,reputation:10,truth:100,alive:true,loc:'ashford',rumors:[],verified:{},daysWithoutFood:0,actionsLeft:3};
- TOWNS.forEach(t=>{t.wealth=60;t.unrest=10;t.known=false});
- Object.keys(FACTIONS).forEach(k=>{FACTIONS[k].power=Math.max(20,FACTIONS[k].power);FACTIONS[k].morality=k==='Cult'?-50:k==='Crown'?20:0});
- log('You arrive in Ashford with 40 gold and no reputation. Every rumor you hear may be true, false, or profitable.','gold');
- discover('ashford'); render(); modal('How to win','Become indispensable. Raise any faction above 85 power, or survive to Day 40 while keeping at least one faction above 60. If your reputation falls below -20, or you die, the run ends.');
-}
-function log(msg,cls=''){const d=document.createElement('div');d.innerHTML=msg;if(cls)d.className=cls;document.getElementById('log').prepend(d);}
-function discover(id){const t=TOWNS.find(x=>x.id===id);if(!t.known){t.known=true;log('You discover <b>'+t.name+'</b>.','blue');}}
-function rumor(){const pool=RUMOR_POOL.filter(r=>!S.rumors.some(x=>x.id===r.id));return pool[Math.floor(Math.random()*pool.length)];}
-function render(){
- document.getElementById('stats').innerHTML=`<table>
- <tr><td>Day</td><td>${S.day}</td></tr>
- <tr><td>Gold</td><td class="gold">${S.gold}</td></tr>
- <tr><td>Location</td><td>${TOWNS.find(t=>t.id===S.loc).name}</td></tr>
- <tr><td>Reputation</td><td class="${S.reputation<0?'bad':'good'}">${S.reputation}</td></tr>
- <tr><td>Accuracy</td><td>${S.truth}%</td></tr>
- <tr><td>Actions left</td><td>${S.actionsLeft}</td></tr></table>`;
- document.getElementById('towns').innerHTML='<tr><th>Town</th><th>Wealth</th><th>Unrest</th><th>Status</th></tr>'+TOWNS.map(t=>`<tr><td>${t.name}${t.id===S.loc?' <span class="blue">(here)</span>':''}</td><td>${t.wealth}</td><td class="${t.unrest>60?'bad':''}">${t.unrest}</td><td>${t.known?'Known':'Unknown'}</td></tr>`).join('');
- document.getElementById('rumors').innerHTML=S.rumors.length?S.rumors.map(r=>`<div style="border-bottom:1px dashed #1e2833;padding:5px 0"><b>${r.text}</b><br><span class="small">${r.verified?'<span class="good">Verified</span>':'Unverified'} · est. value ${r.value}</span></div>`).join(''):'<div class="small">You know nothing worth selling yet.</div>';
- document.getElementById('factions').innerHTML=Object.entries(FACTIONS).map(([k,f])=>`<div style="margin-bottom:7px"><b>${f.name}</b><br><span class="small">Power ${f.power} · Morality ${f.morality}</span></div>`).join('');
- const sel=document.getElementById('town');sel.innerHTML=TOWNS.map(t=>`<option value="${t.id}" ${t.id===S.loc?'selected':''}>${t.name}</option>`).join('');
- document.querySelectorAll('button').forEach(b=>b.disabled=!S.alive||S.actionsLeft<=0&&b.id!=='rest'&&b.id!=='travel');
-}
-function modal(title,body){document.getElementById('mtitle').textContent=title;document.getElementById('mbody').innerHTML=body;document.getElementById('modal').style.display='grid';}
-document.getElementById('mclose').onclick=()=>document.getElementById('modal').style.display='none';
-function useAction(){if(S.actionsLeft<=0){log('No actions remain. Rest to advance the day.','bad');return false}S.actionsLeft--;return true}
-function endDay(){
- S.day++;S.actionsLeft=3;
- TOWNS.forEach(t=>{t.unrest=Math.max(0,t.unrest-3+Math.floor(Math.random()*5));t.wealth=Math.max(10,t.wealth+Math.floor(Math.random()*7)-3)});
- Object.values(FACTIONS).forEach(f=>f.power=Math.max(5,Math.min(100,f.power+Math.floor(Math.random()*5)-2)));
- if(S.gold<5){S.daysWithoutFood++;if(S.daysWithoutFood>=3){die('You starve in a roadside ditch. Information could not be eaten.');return}}else S.daysWithoutFood=0;
- if(S.day>=40)checkWin();
- if(Math.random()<.12&&S.reputation<0){die('A faction you deceived sends killers after you.');return}
- render();
-}
-function die(reason){S.alive=false;render();modal('RUN ENDED',`<p class="bad">${reason}</p><p>Days survived: ${S.day}. Gold: ${S.gold}. Reputation: ${S.reputation}.</p><button onclick="newGame()">Start a new life</button>`);}
-function checkWin(){
- const top=Math.max(...Object.values(FACTIONS).map(f=>f.power));
- if(top>=85||S.day>=40&&top>=60){S.alive=false;render();modal('VICTORY',`<p class="good">You have become the realm’s indispensable broker of truth and lies.</p><p>Days: ${S.day}. Gold: ${S.gold}. Reputation: ${S.reputation}.</p><button onclick="newGame()">New run</button>`);}
-}
-document.getElementById('travel').onclick=()=>{
- const dest=document.getElementById('town').value;if(dest===S.loc)return;
- if(!useAction())return;
- const risk=.06+(TOWNS.find(t=>t.id===dest).unrest/300);
- if(Math.random()<risk){die('Bandits ambush you on the road. Your secrets die with you.');return}
- S.loc=dest;S.gold=Math.max(0,S.gold-2);discover(dest);log('You travel to <b>'+TOWNS.find(t=>t.id===dest).name+'</b>.','blue');render();
-};
-document.getElementById('listen').onclick=()=>{
- if(!useAction())return;const r=rumor();
- if(!r){log('You hear only repeated gossip; no new rumor emerges.','dim');return}
- const falseChance=Math.max(.08,.35-S.reputation/200);
- const isTrue=Math.random()>falseChance;
- S.rumors.push({...r,verified:false,isTrue});
- log('You hear: “'+r.text+'” <span class="small">(unverified)</span>');
-};
-document.getElementById('investigate').onclick=()=>{
- if(!useAction())return;const un=S.rumors.filter(r=>!r.verified);
- if(!un.length){log('You have no unverified rumors to investigate.','dim');return}
- const r=un[Math.floor(Math.random()*un.length)];const cost=5;
- if(S.gold<cost){log('Investigation costs 5 gold; you cannot afford it.','bad');return}
- S.gold-=cost;r.verified=true;
- if(r.isTrue){S.truth=Math.min(100,S.truth+4);S.reputation+=2;log('You verify: “'+r.text+'” <span class="good">TRUE</span>.','good')}
- else{S.truth=Math.max(0,S.truth-6);S.reputation-=3;log('You discover the rumor is <span class="bad">FALSE</span>: “'+r.text+'”.','bad')}
- render();
-};
-document.getElementById('trade').onclick=()=>{
- if(!useAction())return;const t=TOWNS.find(x=>x.id===S.loc);const known=S.rumors.filter(r=>!t.knownRumors?.includes(r.id));
- if(!S.rumors.length){log('You have no rumor to sell.','dim');return}
- const r=S.rumors[Math.floor(Math.random()*S.rumors.length)];
- let price=Math.round(r.value*(t.wealth/60)*(r.verified?1.4:.7)*(1+t.unrest/150));
- price=Math.max(3,price);S.gold+=price;t.knownRumors=(t.knownRumors||[]).concat(r.id);
- S.rumors=S.rumors.filter(x=>x.id!==r.id);
- if(r.verified&&r.isTrue)S.reputation+=1;
- if(!r.verified&&Math.random()<.4){S.reputation-=2;log('The buyer later learns your rumor was unreliable.','bad')}
- log(`You sell “${r.text}” in ${t.name} for <span class="gold">${price} gold</span>.`);
- if(r.isTrue)r.effect(t);
- render();
-};
-document.getElementById('spread').onclick=()=>{
- if(!useAction())return;const t=TOWNS.find(x=>x.id===S.loc);
- if(!S.rumors.length){log('You have no rumor to spread.','dim');return}
- const r=S.rumors[Math.floor(Math.random()*S.rumors.length)];
- S.rumors=S.rumors.filter(x=>x.id!==r.id);
- if(r.isTrue){r.effect(t);S.reputation+=1;log(`You spread a true rumor in ${t.name}. ${r.effect(t)}`,'good')}
- else{t.unrest+=14;S.reputation-=4;S.truth=Math.max(0,S.truth-5);log(`You spread a false rumor in ${t.name}. Unrest surges and your credibility suffers.`,'bad')}
- if(t.unrest>75){const f=Object.keys(FACTIONS)[Math.floor(Math.random()*3)];FACTIONS[f].power-=6;log(`${t.name} erupts in unrest. ${FACTIONS[f].name} loses influence.`,'bad')}
- render();
-};
-document.getElementById('rest').onclick=()=>{log('You rest. A new day begins.');endDay();};
-newGame();
+const canvas=document.getElementById('renderCanvas');
+const engine=new BABYLON.Engine(canvas,true,{stencil:true,preserveDrawingBuffer:true});
+const scene=new BABYLON.Scene(engine);
+scene.clearColor=new BABYLON.Color4(0,0,0,1);
+scene.fogMode=BABYLON.Scene.FOGMODE_EXP2; scene.fogDensity=.006; scene.fogColor=new BABYLON.Color3(.02,.04,.08);
+const camera=new BABYLON.UniversalCamera('player',new BABYLON.Vector3(0,1.7,6),scene);
+camera.attachControl(canvas,true); camera.speed=.22; camera.inertia=.82; camera.angularSensibility=1400;
+camera.keysUp=[87];camera.keysDown=[83];camera.keysLeft=[65];camera.keysRight=[68];
+camera.minZ=.08; camera.ellipsoid=new BABYLON.Vector3(.45,1.0,.45);
+scene.collisionsEnabled=true; camera.checkCollisions=true; camera.applyGravity=true;
+const hemi=new BABYLON.HemisphericLight('hemi',new BABYLON.Vector3(0,1,0),scene); hemi.intensity=.35;
+const flashlight=new BABYLON.SpotLight('flash',camera.position.clone(),new BABYLON.Vector3(0,0,1),1.1,8,scene);
+flashlight.intensity=0; flashlight.parent=camera; flashlight.position=new BABYLON.Vector3(0,-.1,.2);
+const state={phase:'habitat',power:100,oxygen:100,hull:100,fuel:25,cargo:0,repairs:0,hasCore:false,flash:false,shipMode:false,dead:false};
+const mats={};
+function mat(n,c,e=0,rough=.85){const m=new BABYLON.StandardMaterial(n,scene);m.diffuseColor=BABYLON.Color3.FromHexString(c);m.emissiveColor=BABYLON.Color3.FromHexString(e);m.specularColor=new BABYLON.Color3(.1,.1,.1);m.roughness=rough;return m}
+mats.floor=mat('floor','#1b2430','#050a12'); mats.wall=mat('wall','#232d3c','#070d16'); mats.panel=mat('panel','#0e2a44','#0d5f9c');
+mats.metal=mat('metal','#3a4655','#0a1017'); mats.rust=mat('rust','#4b3327','#150c07'); mats.earth=mat('earth','#3d3527','#0d0b07');
+mats.concrete=mat('concrete','#565a60','#0a0b0d'); mats.ai=mat('ai','#101820','#00ffcc'); mats.core=mat('core','#182c3a','#00e0ff');
+mats.danger=mat('danger','#331111','#ff3b30'); mats.green=mat('green','#0e2f1c','#39ff88');
+function box(n,s,p,m,collide=true){const b=BABYLON.MeshBuilder.CreateBox(n,{width:s.x,height:s.y,depth:s.z},scene);b.position=p;b.material=m;b.checkCollisions=collide;return b}
+function interactable(n,p,r=2.4,onUse,label){const marker=BABYLON.MeshBuilder.CreateSphere(n,{diameter:.22},scene);marker.position=p;marker.material=mats.panel;const light=new BABYLON.PointLight(n+'L',p,scene);light.diffuse=BABYLON.Color3.FromHexString('#57d0ff');light.intensity=.8;light.range=r*2;return{mesh:marker,position:p,radius:r,onUse,label,active:true}}
+const interactables=[];
+function addInteract(n,p,onUse,label,r=2.4){const i=interactable(n,p,r,onUse,label);interactables.push(i);return i}
+function toast(t){const e=document.getElementById('toast');e.textContent=t;e.style.opacity=1;clearTimeout(e._t);e._t=setTimeout(()=>e.style.opacity=0,2600)}
+function objective(t){document.getElementById('objective').innerHTML='<strong>Objective:</strong> '+t}
+
+// Habitat
+const habitat=new BABYLON.TransformNode('habitat',scene);
+box('hFloor',new BABYLON.Vector3(22,.4,18),new BABYLON.Vector3(0,-.2,0),mats.floor).parent=habitat;
+box('hCeil',new BABYLON.Vector3(22,.4,18),new BABYLON.Vector3(0,4.2,0),mats.wall).parent=habitat;
+[[-11,0],[11,0]].forEach(([x],i)=>box('hWallX'+i,new BABYLON.Vector3(.4,4.4,18),new BABYLON.Vector3(x,2,0),mats.wall).parent=habitat);
+[[0,-9],[0,9]].forEach(([_,z],i)=>box('hWallZ'+i,new BABYLON.Vector3(22,4.4,.4),new BABYLON.Vector3(0,2,z),mats.wall).parent=habitat);
+for(let i=-2;i<=2;i++)box('rib'+i,new BABYLON.Vector3(.5,.5,18),new BABYLON.Vector3(i*4,4,0),mats.metal).parent=habitat;
+const brokenPower=addInteract('powerRepair',new BABYLON.Vector3(-7,1.2,-6),()=>{
+  if(state.repairs>=1)return toast('Habitat power is stable.');
+  state.repairs=1;state.power=Math.min(100,state.power+20);brokenPower.mesh.material=mats.green;brokenPower.active=false;
+  toast('Power conduit repaired. Air recycler online.');objective('Take the shuttle at the habitat airlock and fly to the derelict.');
+},'Repair power conduit [E]');
+const airlock=addInteract('airlock',new BABYLON.Vector3(0,1.4,8.4),()=>{
+  if(state.repairs<1)return toast('The habitat needs its power conduit repaired first.');
+  enterShip();
+},'Board shuttle [E]',3);
+const shuttle=box('shuttle',new BABYLON.Vector3(3.2,2.2,5),new BABYLON.Vector3(0,1.3,13),mats.metal);
+box('shuttleGlass',new BABYLON.Vector3(2.2,1,0.15),new BABYLON.Vector3(0,1.7,15.45),mats.panel,false);
+const engineGlow=box('engineGlow',new BABYLON.Vector3(2.6,.4,.4),new BABYLON.Vector3(0,1.1,10.6),mats.core,false);
+
+// Space / derelict
+const spaceRoot=new BABYLON.TransformNode('space',scene);
+const derelict=box('derelict',new BABYLON.Vector3(18,7,34),new BABYLON.Vector3(0,0,-170),mats.rust);derelict.parent=spaceRoot;
+box('dTower',new BABYLON.Vector3(4,14,4),new BABYLON.Vector3(0,10,-170),mats.metal).parent=spaceRoot;
+for(let i=0;i<7;i++){const s=BABYLON.MeshBuilder.CreateSphere('star'+i,{diameter:.4},scene);s.position=new BABYLON.Vector3(-70+i*22,20+i*7,-260-i*25);s.material=mats.panel}
+const salvageSpots=[['Power cell',new BABYLON.Vector3(-5,1,-160)],['Fuel canister',new BABYLON.Vector3(5,1,-175)],['Structural alloy',new BABYLON.Vector3(0,1,-185)],['Descent module',new BABYLON.Vector3(-7,1,-180)],['Coolant pump',new BABYLON.Vector3(7,1,-165)]];
+salvageSpots.forEach(([name,p],idx)=>{const b=box('salv'+idx,new BABYLON.Vector3(.8,.8,.8),p,mats.panel,false);b.parent=spaceRoot;
+ addInteract('salvI'+idx,p,()=>{if(state.cargo>=5)return toast('Cargo capacity full.');state.cargo++;if(name==='Fuel canister')state.fuel=Math.min(100,state.fuel+25);if(name==='Descent module')state.canDescend=true;b.setEnabled(false);i.active=false;toast('Salvaged: '+name);document.getElementById('cargoText').textContent=state.cargo+' / 5';if(state.cargo>=5)objective('Return to the shuttle and begin atmospheric descent.');},'Salvage '+name+' [E]')});
+const derelictAirlock=addInteract('derelictAirlock',new BABYLON.Vector3(0,1.5,-153),()=>{exitShipAt(new BABYLON.Vector3(0,1.7,-150));toast('EVA: salvage the derelict, then return to the shuttle.');},'Dock and enter derelict [E]',4);
+
+// Earth
+const earth=new BABYLON.MeshBuilder.CreateDisc('earthDisc',{radius:900,tessellation:64},scene);
+earth.rotation.x=Math.PI/2;earth.position=new BABYLON.Vector3(0,-620,0);earth.material=mats.earth;
+const ground=BABYLON.MeshBuilder.CreateGround('ground',{width:600,height:600,subdivisions:40},scene);
+ground.position.y=-30;ground.material=mats.earth;ground.checkCollisions=true;ground.isVisible=false;
+const ruin=new BABYLON.TransformNode('ruin',scene);
+box('ruinFloor',new BABYLON.Vector3(40,.5,40),new BABYLON.Vector3(0,-29.8,0),mats.concrete).parent=ruin;
+[[-20,0],[20,0]].forEach(([x],i)=>box('rw'+i,new BABYLON.Vector3(.8,8,40),new BABYLON.Vector3(x,-26,0),mats.concrete).parent=ruin);
+[[0,-20],[0,20]].forEach(([_,z],i)=>box('rw2'+i,new BABYLON.Vector3(40,8,.8),new BABYLON.Vector3(0,-26,z),mats.concrete).parent=ruin);
+for(let i=0;i<5;i++)box('pillar'+i,new BABYLON.Vector3(1.4,7,1.4),new BABYLON.Vector3(-14+i*7,-26,-10),mats.concrete).parent=ruin;
+const vault=box('vault',new BABYLON.Vector3(5,5,5),new BABYLON.Vector3(0,-27,14),mats.ai);vault.parent=ruin;
+const guardian=box('guardian',new BABYLON.Vector3(1.6,1.6,1.6),new BABYLON.Vector3(0,-26,8),mats.ai);guardian.parent=ruin;
+const guardianLight=new BABYLON.PointLight('gL',guardian.position,scene);guardianLight.diffuse=BABYLON.Color3.FromHexString('#00ffcc');guardianLight.intensity=2;guardianLight.range=22;guardianLight.parent=guardian;
+const corePickup=addInteract('core',new BABYLON.Vector3(0,-26.5,14),()=>{state.hasCore=true;corePickup.active=false;vault.material=mats.green;toast('Recovered pre-collapse AI core.');objective('Return to the surface relay and restore communications.');},'Extract AI core [E]',3);
+const relay=addInteract('relay',new BABYLON.Vector3(12,-27.5,-12),()=>{
+ if(!state.hasCore)return toast('The relay requires a pre-collapse power core.');
+ state.phase='complete';relay.mesh.material=mats.green;relay.active=false;objective('Communications restored. Prototype journey complete.');
+ toast('RESTORATION COMPLETE — humanity has a voice again.');
+},'Restore relay [E]',3.2);
+// Ship mechanics
+const shipRoot=new BABYLON.TransformNode('shipRoot',scene);shuttle.parent=shipRoot;engineGlow.parent=shipRoot;
+function enterShip(){state.shipMode=true;camera.parent=shipRoot;camera.position=new BABYLON.Vector3(0,1.7,1.5);camera.applyGravity=false;camera.checkCollisions=false;camera.speed=.9;scene.fogDensity=.0008;toast('Shuttle online. Fly toward the derelict; E near it to dock.');objective('Fly to the derelict and salvage 5 items.');}
+function exitShipAt(p){state.shipMode=false;camera.parent=null;camera.position=p;camera.applyGravity=true;camera.checkCollisions=true;camera.speed=.22;scene.fogDensity=state.phase==='earth'?.012:.006;}
+function descend(){if(!state.canDescend)return toast('You need the descent module from the derelict.');if(state.fuel<15)return toast('Not enough fuel for atmospheric entry.');state.fuel-=15;state.phase='earth';shipRoot.position=new BABYLON.Vector3(0,0,0);camera.parent=null;camera.position=new BABYLON.Vector3(0,-25,0);camera.applyGravity=true;camera.checkCollisions=true;camera.speed=.22;scene.fogDensity=.012;scene.fogColor=new BABYLON.Color3(.08,.07,.06);hemi.intensity=.75;ground.isVisible=true;earth.setEnabled(false);spaceRoot.setEnabled(false);habitat.setEnabled(false);shuttle.setEnabled(false);engineGlow.setEnabled(false);toast('Atmospheric entry complete. Scavenge the ruin and locate the AI vault.');objective('Enter the ruin, recover the AI core, and restore the relay.');}
+const descentTrigger=addInteract('descent',new BABYLON.Vector3(0,1.5,13),()=>{if(state.cargo>=5)descend();else toast('Salvage all 5 items before descending.');},'Begin atmospheric descent [E]',3.5);
+// Guardian AI
+let guardianHp=100,guardianActive=false;
+function damagePlayer(n){state.hull=Math.max(0,state.hull-n);if(state.hull<=0&&!state.dead){state.dead=true;toast('Exosuit failure. Reload the page to retry.');}}
+scene.onBeforeRenderObservable.add(()=>{
+ const dt=engine.getDeltaTime()/1000;
+ // resources
+ if(state.phase!=='complete'&&!state.dead){
+  state.power=Math.max(0,state.power-dt*(state.shipMode?.25:.12));
+  state.oxygen=Math.max(0,state.oxygen-dt*(state.phase==='earth'?.16:.08));
+  if(state.oxygen<=0||state.power<=0)damagePlayer(dt*8);
+ }
+ // HUD
+ const set=(id,v)=>document.getElementById(id).style.width=v+'%';
+ set('powerBar',state.power);set('oxygenBar',state.oxygen);set('hullBar',state.hull);set('fuelBar',state.fuel);
+ document.getElementById('powerText').textContent=Math.round(state.power)+'%';
+ document.getElementById('oxygenText').textContent=Math.round(state.oxygen)+'%';
+ document.getElementById('hullText').textContent=Math.round(state.hull)+'%';
+ document.getElementById('fuelText').textContent=Math.round(state.fuel)+'%';
+ // flashlight follows camera
+ flashlight.direction=camera.getDirection(BABYLON.Axis.Z);
+ // ship flight
+ if(state.shipMode){
+  const fwd=camera.getDirection(BABYLON.Axis.Z);const right=camera.getDirection(BABYLON.Axis.X);
+  let move=BABYLON.Vector3.Zero();
+  if(input.w)move.addInPlace(fwd);if(input.s)move.subtractInPlace(fwd);
+  if(input.d)move.addInPlace(right);if(input.a)move.subtractInPlace(right);
+  if(input.space)move.y+=1;if(input.ctrl)move.y-=1;
+  if(move.lengthSquared()>0){move.normalize().scaleInPlace(dt*(input.shift?55:28));shipRoot.position.addInPlace(move);state.fuel=Math.max(0,state.fuel-dt*(input.shift?.8:.35));}
+  shipRoot.rotation.y+= (input.q?1:0)*dt*.8 - (input.e?1:0)*dt*.8;
+  engineGlow.material.emissiveColor=move.lengthSquared()>0?BABYLON.Color3.FromHexString('#57d0ff'):BABYLON.Color3.FromHexString('#0a2a44');
+ }
+ // guardian behavior
+ if(state.phase==='earth'&&state.hasCore===false){
+  const d=BABYLON.Vector3.Distance(camera.position,guardian.position);
+  if(d<26)guardianActive=true;
+  if(guardianActive){
+   const dir=camera.position.subtract(guardian.position).normalize();
+   guardian.position.addInPlace(dir.scale(dt*4.5));guardian.rotation.y+=dt*2;
+   if(d<2.6){damagePlayer(dt*18);guardian.material=mats.danger;}else guardian.material=mats.ai;
+  }
+ }
+ // interaction prompt
+ let best=null,bd=99;
+ for(const i of interactables){if(!i.active)continue;const d=BABYLON.Vector3.Distance(camera.position,i.position);if(d<i.radius&&d<bd){bd=d;best=i}}
+ const prompt=document.getElementById('prompt');
+ if(best&&!state.dead){prompt.style.display='block';prompt.textContent=best.label;currentTarget=best}else prompt.style.display='none';
+});
+let currentTarget=null;
+const input={w:false,a:false,s:false,d:false,space:false,ctrl:false,shift:false,q:false,e:false};
+addEventListener('keydown',e=>{const k=e.key.toLowerCase();
+ if(k==='w')input.w=true;if(k==='a')input.a=true;if(k==='s')input.s=true;if(k==='d')input.d=true;
+ if(k===' '){input.space=true;e.preventDefault()}if(k==='control')input.ctrl=true;if(k==='shift')input.shift=true;
+ if(k==='q')input.q=true;if(k==='e')input.e=true;
+ if(k==='f'){state.flash=!state.flash;flashlight.intensity=state.flash?2.2:0}
+ if(k==='r'){if(state.phase==='habitat'&&state.repairs<1){state.repairs=1;state.power=Math.min(100,state.power+20);brokenPower.active=false;brokenPower.mesh.material=mats.green;toast('Emergency repair complete.');objective('Board the shuttle at the habitat airlock.')}}
+ if(k==='e'&&currentTarget&&currentTarget.active)currentTarget.onUse();
+});
+addEventListener('keyup',e=>{const k=e.key.toLowerCase();if(k==='w')input.w=false;if(k==='a')input.a=false;if(k==='s')input.s=false;if(k==='d')input.d=false;if(k===' ')input.space=false;if(k==='control')input.ctrl=false;if(k==='shift')input.shift=false;if(k==='q')input.q=false;if(k==='e')input.e=false});
+document.getElementById('play').onclick=()=>{document.getElementById('start').style.display='none';canvas.focus();if(!document.pointerLockElement)canvas.requestPointerLock();toast('Habitat systems failing. Repair the power conduit.')};
+canvas.addEventListener('click',()=>{if(document.getElementById('start').style.display==='none'&&!document.pointerLockElement)canvas.requestPointerLock()});
+engine.runRenderLoop(()=>scene.render());
+addEventListener('resize',()=>engine.resize());
 </script>
 </body>
 </html>

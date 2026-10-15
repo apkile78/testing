@@ -1,200 +1,464 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>AI-Collapse Survival Sandbox — Prototype</title>
+<meta charset="utf-8">
+<title>VOIDLINE: 2D Extraction</title>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#000;color:#d8e6ff;font-family:Inter,system-ui,sans-serif}
-  #renderCanvas{width:100%;height:100%;display:block;outline:none;touch-action:none}
-  .hud{position:fixed;left:16px;bottom:16px;z-index:10;background:rgba(4,10,20,.72);border:1px solid #2b6cb0;padding:12px 14px;border-radius:10px;min-width:270px;backdrop-filter:blur(6px)}
-  .bar{height:9px;background:#12233b;border-radius:6px;overflow:hidden;margin:4px 0 9px}
-  .fill{height:100%;width:100%;transition:width .15s}
-  .power{background:#57d0ff}.oxygen{background:#6ef2a5}.hull{background:#ffb457}.fuel{background:#ffd166}
-  .row{display:flex;justify-content:space-between;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#9fb6d4}
-  #objective{position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:10;background:rgba(4,10,20,.78);border:1px solid #2b6cb0;border-radius:10px;padding:10px 16px;max-width:min(760px,92vw);font-size:14px;text-align:center}
-  #prompt{position:fixed;left:50%;bottom:120px;transform:translateX(-50%);z-index:10;background:rgba(6,16,28,.85);border:1px solid #4c9aff;padding:8px 14px;border-radius:8px;display:none;font-size:14px}
-  #toast{position:fixed;top:70px;left:50%;transform:translateX(-50%);z-index:11;background:rgba(10,30,50,.9);border:1px solid #57d0ff;color:#e8f6ff;padding:10px 16px;border-radius:8px;opacity:0;transition:opacity .25s;pointer-events:none}
-  #start{position:fixed;inset:0;z-index:20;background:radial-gradient(circle at 50% 35%,#0b1c30,#01050a 70%);display:flex;align-items:center;justify-content:center;text-align:center;padding:24px}
-  .card{max-width:720px;border:1px solid #2b6cb0;background:rgba(3,10,20,.82);padding:28px;border-radius:14px}
-  h1{margin:0 0 8px;font-size:clamp(24px,4vw,38px);color:#e8f6ff}
-  p{color:#a9c1dc;line-height:1.55}
-  .keys{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;margin:18px 0;font-size:13px;color:#cfe2f7}
-  .keys div{background:#0a1728;border:1px solid #1e3d61;border-radius:8px;padding:8px}
-  button{background:#1a6ed8;border:0;color:white;font-weight:700;padding:12px 22px;border-radius:9px;cursor:pointer;font-size:15px}
-  button:hover{background:#2b82f0}
-  .tag{display:inline-block;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#57d0ff;border:1px solid #2b6cb0;padding:3px 8px;border-radius:99px;margin-bottom:12px}
+  html,body{margin:0;height:100%;background:#07090c;color:#dfe7ef;font-family:Consolas,monospace;overflow:hidden}
+  #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{background:#05070a;image-rendering:pixelated;box-shadow:0 0 60px #000}
+  #ui{position:fixed;left:0;top:0;width:100%;pointer-events:none;font-size:14px}
+  .panel{position:absolute;background:rgba(8,12,16,.78);border:1px solid #2b3a48;padding:8px 10px;border-radius:6px}
+  #hud{left:12px;bottom:12px;min-width:280px}
+  #topright{right:12px;top:12px;text-align:right}
+  #lootlog{right:12px;bottom:12px;width:280px;max-height:180px;overflow:hidden}
+  #menu{position:fixed;inset:0;background:radial-gradient(circle at 50% 35%,#101820,#04060a 70%);display:flex;align-items:center;justify-content:center;z-index:10}
+  .card{width:min(860px,94vw);border:1px solid #2f4353;background:rgba(10,15,20,.94);padding:26px;border-radius:10px}
+  h1{margin:0 0 4px;font-size:42px;letter-spacing:6px;color:#7ee0ff;text-shadow:0 0 18px #0af}
+  h2{margin:0 0 18px;color:#8fa3b3;font-weight:normal;font-size:15px}
+  .maps{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:18px 0}
+  .map{border:1px solid #33475a;padding:14px;cursor:pointer;background:#0b1117;transition:.15s}
+  .map:hover{border-color:#7ee0ff;transform:translateY(-3px)}
+  .map b{display:block;color:#7ee0ff;margin-bottom:6px}
+  .small{font-size:12px;color:#8fa3b3;line-height:1.5}
+  kbd{background:#182430;border:1px solid #3c5164;border-radius:3px;padding:1px 5px}
+  #death{display:none}
+  button{background:#123; color:#7ee0ff;border:1px solid #3d5a70;padding:9px 16px;border-radius:5px;cursor:pointer;font-family:inherit}
+  button:hover{background:#1a3348}
 </style>
-<script src="https://cdn.babylonjs.com/babylon.js"></script>
 </head>
 <body>
-<canvas id="renderCanvas"></canvas>
-<div id="objective"><strong>Objective:</strong> Repair the habitat, salvage the derelict, descend to Earth, recover the AI core, and restore the relay.</div>
-<div id="prompt"></div>
-<div id="toast"></div>
-<div class="hud">
-  <div class="row"><span>Exosuit power</span><span id="powerText">100%</span></div><div class="bar"><div id="powerBar" class="fill power"></div></div>
-  <div class="row"><span>Life support</span><span id="oxygenText">100%</span></div><div class="bar"><div id="oxygenBar" class="fill oxygen"></div></div>
-  <div class="row"><span>Suit integrity</span><span id="hullText">100%</span></div><div class="bar"><div id="hullBar" class="fill hull"></div></div>
-  <div class="row"><span>Ship fuel</span><span id="fuelText">25%</span></div><div class="bar"><div id="fuelBar" class="fill fuel"></div></div>
-  <div class="row"><span>Salvage</span><span id="cargoText">0 / 5</span></div>
+<div id="wrap"><canvas id="game"></canvas></div>
+<div id="ui">
+  <div class="panel" id="hud"></div>
+  <div class="panel" id="topright"></div>
+  <div class="panel" id="lootlog"></div>
 </div>
-<div id="start"><div class="card">
-  <div class="tag">Early playable prototype</div>
-  <h1>Untitled AI-Collapse Survival Sandbox</h1>
-  <p>You wake alone in a failing orbital habitat above a collapsed Earth. Repair enough systems to survive, fly to a derelict for salvage, enter the atmosphere, recover a pre-collapse AI core, and restore a critical communications relay.</p>
-  <div class="keys">
-    <div><b>WASD</b> — move / fly</div><div><b>Mouse</b> — look</div><div><b>Shift</b> — sprint / boost</div>
-    <div><b>Space</b> — jump / ascend</div><div><b>Ctrl</b> — descend in ship</div><div><b>E</b> — interact / salvage</div>
-    <div><b>F</b> — flashlight</div><div><b>R</b> — repair nearby system</div><div><b>Esc</b> — release mouse</div>
+<div id="menu">
+  <div class="card">
+    <h1>VOIDLINE</h1>
+    <h2>2D top-down extraction shooter — raid, loot, survive, extract.</h2>
+    <div class="maps" id="maps"></div>
+    <div class="small">
+      <kbd>WASD</kbd> move &nbsp; <kbd>Mouse</kbd> aim &nbsp; <kbd>Click</kbd> fire &nbsp; <kbd>R</kbd> reload &nbsp; <kbd>E</kbd> loot / extract &nbsp; <kbd>Shift</kbd> sprint &nbsp; <kbd>1-4</kbd> weapons &nbsp; <kbd>Esc</kbd> pause<br><br>
+      Kill hostiles, collect gear, and reach the green extraction zone before the raid timer expires. Dying loses all loot carried into the raid.
+    </div>
   </div>
-  <button id="play">Begin survival run</button>
-</div></div>
+</div>
 <script>
-const canvas=document.getElementById('renderCanvas');
-const engine=new BABYLON.Engine(canvas,true,{stencil:true,preserveDrawingBuffer:true});
-const scene=new BABYLON.Scene(engine);
-scene.clearColor=new BABYLON.Color4(0,0,0,1);
-scene.fogMode=BABYLON.Scene.FOGMODE_EXP2; scene.fogDensity=.006; scene.fogColor=new BABYLON.Color3(.02,.04,.08);
-const camera=new BABYLON.UniversalCamera('player',new BABYLON.Vector3(0,1.7,6),scene);
-camera.attachControl(canvas,true); camera.speed=.22; camera.inertia=.82; camera.angularSensibility=1400;
-camera.keysUp=[87];camera.keysDown=[83];camera.keysLeft=[65];camera.keysRight=[68];
-camera.minZ=.08; camera.ellipsoid=new BABYLON.Vector3(.45,1.0,.45);
-scene.collisionsEnabled=true; camera.checkCollisions=true; camera.applyGravity=true;
-const hemi=new BABYLON.HemisphericLight('hemi',new BABYLON.Vector3(0,1,0),scene); hemi.intensity=.35;
-const flashlight=new BABYLON.SpotLight('flash',camera.position.clone(),new BABYLON.Vector3(0,0,1),1.1,8,scene);
-flashlight.intensity=0; flashlight.parent=camera; flashlight.position=new BABYLON.Vector3(0,-.1,.2);
-const state={phase:'habitat',power:100,oxygen:100,hull:100,fuel:25,cargo:0,repairs:0,hasCore:false,flash:false,shipMode:false,dead:false};
-const mats={};
-function mat(n,c,e=0,rough=.85){const m=new BABYLON.StandardMaterial(n,scene);m.diffuseColor=BABYLON.Color3.FromHexString(c);m.emissiveColor=BABYLON.Color3.FromHexString(e);m.specularColor=new BABYLON.Color3(.1,.1,.1);m.roughness=rough;return m}
-mats.floor=mat('floor','#1b2430','#050a12'); mats.wall=mat('wall','#232d3c','#070d16'); mats.panel=mat('panel','#0e2a44','#0d5f9c');
-mats.metal=mat('metal','#3a4655','#0a1017'); mats.rust=mat('rust','#4b3327','#150c07'); mats.earth=mat('earth','#3d3527','#0d0b07');
-mats.concrete=mat('concrete','#565a60','#0a0b0d'); mats.ai=mat('ai','#101820','#00ffcc'); mats.core=mat('core','#182c3a','#00e0ff');
-mats.danger=mat('danger','#331111','#ff3b30'); mats.green=mat('green','#0e2f1c','#39ff88');
-function box(n,s,p,m,collide=true){const b=BABYLON.MeshBuilder.CreateBox(n,{width:s.x,height:s.y,depth:s.z},scene);b.position=p;b.material=m;b.checkCollisions=collide;return b}
-function interactable(n,p,r=2.4,onUse,label){const marker=BABYLON.MeshBuilder.CreateSphere(n,{diameter:.22},scene);marker.position=p;marker.material=mats.panel;const light=new BABYLON.PointLight(n+'L',p,scene);light.diffuse=BABYLON.Color3.FromHexString('#57d0ff');light.intensity=.8;light.range=r*2;return{mesh:marker,position:p,radius:r,onUse,label,active:true}}
-const interactables=[];
-function addInteract(n,p,onUse,label,r=2.4){const i=interactable(n,p,r,onUse,label);interactables.push(i);return i}
-function toast(t){const e=document.getElementById('toast');e.textContent=t;e.style.opacity=1;clearTimeout(e._t);e._t=setTimeout(()=>e.style.opacity=0,2600)}
-function objective(t){document.getElementById('objective').innerHTML='<strong>Objective:</strong> '+t}
+const cv=document.getElementById('game'),ctx=cv.getContext('2d');
+let W=innerWidth,H=innerHeight;cv.width=W;cv.height=H;
+addEventListener('resize',()=>{W=innerWidth;H=innerHeight;cv.width=W;cv.height=H});
+const keys={},mouse={x:W/2,y:H/2,down:false};
+addEventListener('keydown',e=>{keys[e.code]=true;if(['Digit1','Digit2','Digit3','Digit4'].includes(e.code))selectWeapon(+e.code.slice(5)-1);if(e.code==='KeyR')reload();if(e.code==='KeyE')interact();if(e.code==='Escape'&&state==='raid')paused=!paused});
+addEventListener('keyup',e=>keys[e.code]=false);
+cv.addEventListener('mousemove',e=>{const r=cv.getBoundingClientRect();mouse.x=e.clientX-r.left;mouse.y=e.clientY-r.top});
+cv.addEventListener('mousedown',()=>mouse.down=true);addEventListener('mouseup',()=>mouse.down=false);
+cv.addEventListener('contextmenu',e=>e.preventDefault());
 
-// Habitat
-const habitat=new BABYLON.TransformNode('habitat',scene);
-box('hFloor',new BABYLON.Vector3(22,.4,18),new BABYLON.Vector3(0,-.2,0),mats.floor).parent=habitat;
-box('hCeil',new BABYLON.Vector3(22,.4,18),new BABYLON.Vector3(0,4.2,0),mats.wall).parent=habitat;
-[[-11,0],[11,0]].forEach(([x],i)=>box('hWallX'+i,new BABYLON.Vector3(.4,4.4,18),new BABYLON.Vector3(x,2,0),mats.wall).parent=habitat);
-[[0,-9],[0,9]].forEach(([_,z],i)=>box('hWallZ'+i,new BABYLON.Vector3(22,4.4,.4),new BABYLON.Vector3(0,2,z),mats.wall).parent=habitat);
-for(let i=-2;i<=2;i++)box('rib'+i,new BABYLON.Vector3(.5,.5,18),new BABYLON.Vector3(i*4,4,0),mats.metal).parent=habitat;
-const brokenPower=addInteract('powerRepair',new BABYLON.Vector3(-7,1.2,-6),()=>{
-  if(state.repairs>=1)return toast('Habitat power is stable.');
-  state.repairs=1;state.power=Math.min(100,state.power+20);brokenPower.mesh.material=mats.green;brokenPower.active=false;
-  toast('Power conduit repaired. Air recycler online.');objective('Take the shuttle at the habitat airlock and fly to the derelict.');
-},'Repair power conduit [E]');
-const airlock=addInteract('airlock',new BABYLON.Vector3(0,1.4,8.4),()=>{
-  if(state.repairs<1)return toast('The habitat needs its power conduit repaired first.');
-  enterShip();
-},'Board shuttle [E]',3);
-const shuttle=box('shuttle',new BABYLON.Vector3(3.2,2.2,5),new BABYLON.Vector3(0,1.3,13),mats.metal);
-box('shuttleGlass',new BABYLON.Vector3(2.2,1,0.15),new BABYLON.Vector3(0,1.7,15.45),mats.panel,false);
-const engineGlow=box('engineGlow',new BABYLON.Vector3(2.6,.4,.4),new BABYLON.Vector3(0,1.1,10.6),mats.core,false);
+// ---------- Maps ----------
+const MAPS=[
+ {name:'SUBLEVEL 7',desc:'Tight industrial corridors. Dense close-quarters ambushes.',size:2600,diff:1,palette:['#20262c','#2b333b','#39434c'],rooms:16},
+ {name:'ASHYARD DISTRICT',desc:'Ruined urban blocks and open kill lanes.',size:3200,diff:2,palette:['#2a2622','#38322b','#4a4238'],rooms:20},
+ {name:'BIOFORGE NEXUS',desc:'Experimental labs. Elite anomalies and high-value loot.',size:3600,diff:3,palette:['#1d2624','#25332f','#31453e'],rooms:22}
+];
+let map=null,state='menu',paused=false,raidTime=0,extractTimer=0,extracting=false;
+const player={x:0,y:0,vx:0,vy:0,r:11,hp:100,maxhp:100,armor:0,speed:2.5,sprint:1.55,angle:0,weapons:[],cur:0,mags:[],ammo:{},loot:[],cash:0,flash:0,recoil:0,hurt:0};
+const bullets=[],enemies=[],loot=[],particles=[],pickups=[],decals=[],floaters=[];
+const weapons=[
+ {name:'PISTOL',dmg:18,rate:13,spread:.045,speed:15,mag:12,reload:38,auto:false,pellets:1,range:900,color:'#ffe9a0',ammoType:'9mm',recoil:2},
+ {name:'SMG',dmg:11,rate:5,spread:.09,speed:16,mag:32,reload:55,auto:true,pellets:1,range:750,color:'#fff2b8',ammoType:'9mm',recoil:1.4},
+ {name:'SHOTGUN',dmg:9,rate:38,spread:.22,speed:13,mag:6,reload:75,auto:false,pellets:7,range:420,color:'#ffd27a',ammoType:'12g',recoil:7},
+ {name:'RIFLE',dmg:31,rate:9,spread:.03,speed:21,mag:20,reload:65,auto:true,pellets:1,range:1300,color:'#cfe9ff',ammoType:'556',recoil:3.5}
+];
+function selectWeapon(i){if(player.weapons.includes(i)){player.cur=i;player.reload=0}}
+function reload(){const w=weapons[player.cur];if(player.mags[player.cur]>=w.mag||!player.ammo[w.ammoType])return;player.reload=w.reload}
+function finishReload(){const w=weapons[player.cur],need=w.mag-player.mags[player.cur],take=Math.min(need,player.ammo[w.ammoType]);player.mags[player.cur]+=take;player.ammo[w.ammoType]-=take}
 
-// Space / derelict
-const spaceRoot=new BABYLON.TransformNode('space',scene);
-const derelict=box('derelict',new BABYLON.Vector3(18,7,34),new BABYLON.Vector3(0,0,-170),mats.rust);derelict.parent=spaceRoot;
-box('dTower',new BABYLON.Vector3(4,14,4),new BABYLON.Vector3(0,10,-170),mats.metal).parent=spaceRoot;
-for(let i=0;i<7;i++){const s=BABYLON.MeshBuilder.CreateSphere('star'+i,{diameter:.4},scene);s.position=new BABYLON.Vector3(-70+i*22,20+i*7,-260-i*25);s.material=mats.panel}
-const salvageSpots=[['Power cell',new BABYLON.Vector3(-5,1,-160)],['Fuel canister',new BABYLON.Vector3(5,1,-175)],['Structural alloy',new BABYLON.Vector3(0,1,-185)],['Descent module',new BABYLON.Vector3(-7,1,-180)],['Coolant pump',new BABYLON.Vector3(7,1,-165)]];
-salvageSpots.forEach(([name,p],idx)=>{const b=box('salv'+idx,new BABYLON.Vector3(.8,.8,.8),p,mats.panel,false);b.parent=spaceRoot;
- addInteract('salvI'+idx,p,()=>{if(state.cargo>=5)return toast('Cargo capacity full.');state.cargo++;if(name==='Fuel canister')state.fuel=Math.min(100,state.fuel+25);if(name==='Descent module')state.canDescend=true;b.setEnabled(false);i.active=false;toast('Salvaged: '+name);document.getElementById('cargoText').textContent=state.cargo+' / 5';if(state.cargo>=5)objective('Return to the shuttle and begin atmospheric descent.');},'Salvage '+name+' [E]')});
-const derelictAirlock=addInteract('derelictAirlock',new BABYLON.Vector3(0,1.5,-153),()=>{exitShipAt(new BABYLON.Vector3(0,1.7,-150));toast('EVA: salvage the derelict, then return to the shuttle.');},'Dock and enter derelict [E]',4);
-
-// Earth
-const earth=new BABYLON.MeshBuilder.CreateDisc('earthDisc',{radius:900,tessellation:64},scene);
-earth.rotation.x=Math.PI/2;earth.position=new BABYLON.Vector3(0,-620,0);earth.material=mats.earth;
-const ground=BABYLON.MeshBuilder.CreateGround('ground',{width:600,height:600,subdivisions:40},scene);
-ground.position.y=-30;ground.material=mats.earth;ground.checkCollisions=true;ground.isVisible=false;
-const ruin=new BABYLON.TransformNode('ruin',scene);
-box('ruinFloor',new BABYLON.Vector3(40,.5,40),new BABYLON.Vector3(0,-29.8,0),mats.concrete).parent=ruin;
-[[-20,0],[20,0]].forEach(([x],i)=>box('rw'+i,new BABYLON.Vector3(.8,8,40),new BABYLON.Vector3(x,-26,0),mats.concrete).parent=ruin);
-[[0,-20],[0,20]].forEach(([_,z],i)=>box('rw2'+i,new BABYLON.Vector3(40,8,.8),new BABYLON.Vector3(0,-26,z),mats.concrete).parent=ruin);
-for(let i=0;i<5;i++)box('pillar'+i,new BABYLON.Vector3(1.4,7,1.4),new BABYLON.Vector3(-14+i*7,-26,-10),mats.concrete).parent=ruin;
-const vault=box('vault',new BABYLON.Vector3(5,5,5),new BABYLON.Vector3(0,-27,14),mats.ai);vault.parent=ruin;
-const guardian=box('guardian',new BABYLON.Vector3(1.6,1.6,1.6),new BABYLON.Vector3(0,-26,8),mats.ai);guardian.parent=ruin;
-const guardianLight=new BABYLON.PointLight('gL',guardian.position,scene);guardianLight.diffuse=BABYLON.Color3.FromHexString('#00ffcc');guardianLight.intensity=2;guardianLight.range=22;guardianLight.parent=guardian;
-const corePickup=addInteract('core',new BABYLON.Vector3(0,-26.5,14),()=>{state.hasCore=true;corePickup.active=false;vault.material=mats.green;toast('Recovered pre-collapse AI core.');objective('Return to the surface relay and restore communications.');},'Extract AI core [E]',3);
-const relay=addInteract('relay',new BABYLON.Vector3(12,-27.5,-12),()=>{
- if(!state.hasCore)return toast('The relay requires a pre-collapse power core.');
- state.phase='complete';relay.mesh.material=mats.green;relay.active=false;objective('Communications restored. Prototype journey complete.');
- toast('RESTORATION COMPLETE — humanity has a voice again.');
-},'Restore relay [E]',3.2);
-// Ship mechanics
-const shipRoot=new BABYLON.TransformNode('shipRoot',scene);shuttle.parent=shipRoot;engineGlow.parent=shipRoot;
-function enterShip(){state.shipMode=true;camera.parent=shipRoot;camera.position=new BABYLON.Vector3(0,1.7,1.5);camera.applyGravity=false;camera.checkCollisions=false;camera.speed=.9;scene.fogDensity=.0008;toast('Shuttle online. Fly toward the derelict; E near it to dock.');objective('Fly to the derelict and salvage 5 items.');}
-function exitShipAt(p){state.shipMode=false;camera.parent=null;camera.position=p;camera.applyGravity=true;camera.checkCollisions=true;camera.speed=.22;scene.fogDensity=state.phase==='earth'?.012:.006;}
-function descend(){if(!state.canDescend)return toast('You need the descent module from the derelict.');if(state.fuel<15)return toast('Not enough fuel for atmospheric entry.');state.fuel-=15;state.phase='earth';shipRoot.position=new BABYLON.Vector3(0,0,0);camera.parent=null;camera.position=new BABYLON.Vector3(0,-25,0);camera.applyGravity=true;camera.checkCollisions=true;camera.speed=.22;scene.fogDensity=.012;scene.fogColor=new BABYLON.Color3(.08,.07,.06);hemi.intensity=.75;ground.isVisible=true;earth.setEnabled(false);spaceRoot.setEnabled(false);habitat.setEnabled(false);shuttle.setEnabled(false);engineGlow.setEnabled(false);toast('Atmospheric entry complete. Scavenge the ruin and locate the AI vault.');objective('Enter the ruin, recover the AI core, and restore the relay.');}
-const descentTrigger=addInteract('descent',new BABYLON.Vector3(0,1.5,13),()=>{if(state.cargo>=5)descend();else toast('Salvage all 5 items before descending.');},'Begin atmospheric descent [E]',3.5);
-// Guardian AI
-let guardianHp=100,guardianActive=false;
-function damagePlayer(n){state.hull=Math.max(0,state.hull-n);if(state.hull<=0&&!state.dead){state.dead=true;toast('Exosuit failure. Reload the page to retry.');}}
-scene.onBeforeRenderObservable.add(()=>{
- const dt=engine.getDeltaTime()/1000;
- // resources
- if(state.phase!=='complete'&&!state.dead){
-  state.power=Math.max(0,state.power-dt*(state.shipMode?.25:.12));
-  state.oxygen=Math.max(0,state.oxygen-dt*(state.phase==='earth'?.16:.08));
-  if(state.oxygen<=0||state.power<=0)damagePlayer(dt*8);
- }
- // HUD
- const set=(id,v)=>document.getElementById(id).style.width=v+'%';
- set('powerBar',state.power);set('oxygenBar',state.oxygen);set('hullBar',state.hull);set('fuelBar',state.fuel);
- document.getElementById('powerText').textContent=Math.round(state.power)+'%';
- document.getElementById('oxygenText').textContent=Math.round(state.oxygen)+'%';
- document.getElementById('hullText').textContent=Math.round(state.hull)+'%';
- document.getElementById('fuelText').textContent=Math.round(state.fuel)+'%';
- // flashlight follows camera
- flashlight.direction=camera.getDirection(BABYLON.Axis.Z);
- // ship flight
- if(state.shipMode){
-  const fwd=camera.getDirection(BABYLON.Axis.Z);const right=camera.getDirection(BABYLON.Axis.X);
-  let move=BABYLON.Vector3.Zero();
-  if(input.w)move.addInPlace(fwd);if(input.s)move.subtractInPlace(fwd);
-  if(input.d)move.addInPlace(right);if(input.a)move.subtractInPlace(right);
-  if(input.space)move.y+=1;if(input.ctrl)move.y-=1;
-  if(move.lengthSquared()>0){move.normalize().scaleInPlace(dt*(input.shift?55:28));shipRoot.position.addInPlace(move);state.fuel=Math.max(0,state.fuel-dt*(input.shift?.8:.35));}
-  shipRoot.rotation.y+= (input.q?1:0)*dt*.8 - (input.e?1:0)*dt*.8;
-  engineGlow.material.emissiveColor=move.lengthSquared()>0?BABYLON.Color3.FromHexString('#57d0ff'):BABYLON.Color3.FromHexString('#0a2a44');
- }
- // guardian behavior
- if(state.phase==='earth'&&state.hasCore===false){
-  const d=BABYLON.Vector3.Distance(camera.position,guardian.position);
-  if(d<26)guardianActive=true;
-  if(guardianActive){
-   const dir=camera.position.subtract(guardian.position).normalize();
-   guardian.position.addInPlace(dir.scale(dt*4.5));guardian.rotation.y+=dt*2;
-   if(d<2.6){damagePlayer(dt*18);guardian.material=mats.danger;}else guardian.material=mats.ai;
+// ---------- World generation ----------
+function rect(x,y,w,h){return{x,y,w,h}}
+function overlap(a,b){return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y}
+function genWorld(m){
+  const g={w:m.size,h:m.size,walls:[],rooms:[],spawns:[],extract:null,palette:m.palette};
+  // border
+  g.walls.push(rect(-80,-80,g.w+160,80),rect(-80,g.h,g.w+160,80),rect(-80,-80,80,g.h+160),rect(g.w,-80,80,g.h+160));
+  let tries=0;
+  while(g.rooms.length<m.rooms&&tries<900){
+    tries++;
+    const w=140+Math.random()*300,h=140+Math.random()*300,x=100+Math.random()*(g.w-300-w),y=100+Math.random()*(g.h-300-h);
+    const r=rect(x,y,w,h);
+    if(g.rooms.some(o=>overlap({x:r.x-70,y:r.y-70,w:r.w+140,h:r.h+140},o)))continue;
+    g.rooms.push(r);
+    // walls with door gaps
+    const door=(side)=>{const t=side==='h';const len=t?w:h;const p=30+Math.random()*(len-100);return[p,p+70]};
+    const [d1a,d1b]=door('h'),[d2a,d2b]=door('v');
+    g.walls.push(rect(x,y,w,12),rect(x,y+h-12,w,12),rect(x,y,12,h),rect(x+w-12,y,12,h));
+    // carve doors by adding floor gaps: simpler—replace wall segments
+    g.walls.pop();g.walls.pop();g.walls.pop();g.walls.pop();
+    g.walls.push(rect(x,y,d1a,12),rect(x+d1b,y,w-d1b,12));
+    g.walls.push(rect(x,y+h-12,d1a,12),rect(x+d1b,y+h-12,w-d1b,12));
+    g.walls.push(rect(x,y,12,d2a),rect(x,y+d2b,12,h-d2b));
+    g.walls.push(rect(x+w-12,y,12,d2a),rect(x+w-12,y+d2b,12,h-d2b));
+    // interior cover
+    for(let i=0;i<3+Math.random()*4;i++){
+      const cw=18+Math.random()*70,ch=18+Math.random()*70;
+      g.walls.push(rect(x+25+Math.random()*(w-cw-50),y+25+Math.random()*(h-ch-50),cw,ch));
+    }
   }
- }
- // interaction prompt
- let best=null,bd=99;
- for(const i of interactables){if(!i.active)continue;const d=BABYLON.Vector3.Distance(camera.position,i.position);if(d<i.radius&&d<bd){bd=d;best=i}}
- const prompt=document.getElementById('prompt');
- if(best&&!state.dead){prompt.style.display='block';prompt.textContent=best.label;currentTarget=best}else prompt.style.display='none';
+  // connect rooms with corridors
+  for(let i=1;i<g.rooms.length;i++){
+    const a=g.rooms[i-1],b=g.rooms[i];
+    const ax=a.x+a.w/2,ay=a.y+a.h/2,bx=b.x+b.w/2,by=b.y+b.h/2;
+    const thick=46;
+    if(Math.random()<.5){
+      g.walls.push(rect(Math.min(ax,bx),ay-thick/2,Math.abs(ax-bx),thick));
+      g.walls.push(rect(bx-thick/2,Math.min(ay,by),thick,Math.abs(ay-by)));
+    }else{
+      g.walls.push(rect(ax-thick/2,Math.min(ay,by),thick,Math.abs(ay-by)));
+      g.walls.push(rect(Math.min(ax,bx),by-thick/2,Math.abs(ax-bx),thick));
+    }
+  }
+  // extraction zone
+  const er=g.rooms[Math.floor(Math.random()*g.rooms.length)];
+  g.extract={x:er.x+er.w/2,y:er.y+er.h/2,r:75};
+  // player spawn far from extract
+  let best=g.rooms[0],bd=-1;
+  for(const r of g.rooms){const d=Math.hypot(r.x+r.w/2-g.extract.x,r.y+r.h/2-g.extract.y);if(d>bd){bd=d;best=r}}
+  g.spawn={x:best.x+best.w/2,y:best.y+best.h/2};
+  return g;
+}
+function collide(x,y,r){
+  for(const w of map.walls)if(x+r>w.x&&x-r<w.x+w.w&&y+r>w.y&&y-r<w.y+w.h)return true;
+  return false;
+}
+function moveEntity(e,dx,dy){
+  if(!collide(e.x+dx,e.y,e.r))e.x+=dx;
+  if(!collide(e.x,e.y+dy,e.r))e.y+=dy;
+}
+
+// ---------- Loot ----------
+const LOOT_TYPES=[
+ {n:'9mm Rounds',t:'ammo',a:'9mm',v:25,c:'#ffd166',icon:'▮'},
+ {n:'12g Shells',t:'ammo',a:'12g',v:40,c:'#ff9f43',icon:'▮'},
+ {n:'5.56 Rounds',t:'ammo',a:'556',v:55,c:'#70e1ff',icon:'▮'},
+ {n:'Medkit',t:'heal',v:70,c:'#6ef58f',icon:'+'},
+ {n:'Armor Plate',t:'armor',v:120,c:'#9fb8ff',icon:'◈'},
+ {n:'GPU Core',t:'cash',v:450,c:'#ff6bd6',icon:'◆'},
+ {n:'Gold Bar',t:'cash',v:800,c:'#ffd700',icon:'◆'},
+ {n:'Classified Drive',t:'cash',v:1400,c:'#ff4d6d',icon:'◆'},
+ {n:'Weapon Mod',t:'cash',v:300,c:'#b388ff',icon:'◆'}
+];
+function spawnLoot(x,y,tier){
+  let pool=LOOT_TYPES.filter(l=>tier>=2||!['Classified Drive','Gold Bar'].includes(l.n));
+  const l=pool[Math.floor(Math.random()*pool.length)];
+  loot.push({x,y,type:l,tier,bob:Math.random()*6});
+}
+function interact(){
+  if(state!=='raid'||paused)return;
+  // loot
+  let best=null,bd=48;
+  for(const l of loot){const d=Math.hypot(l.x-player.x,l.y-player.y);if(d<bd){bd=d;best=l}}
+  if(best){
+    const t=best.type;
+    if(t.t==='ammo')player.ammo[t.a]=(player.ammo[t.a]||0)+30;
+    else if(t.t==='heal')player.heals=(player.heals||0)+1;
+    else if(t.t==='armor')player.armor=Math.min(100,player.armor+35);
+    else player.loot.push(t);
+    loot.splice(loot.indexOf(best),1);
+    floaters.push({x:best.x,y:best.y,text:'+ '+t.n,c:t.c,life:70});
+    log('LOOTED: '+t.n,t.c);
+    return;
+  }
+  // extraction
+  const ex=map.extract;
+  if(Math.hypot(ex.x-player.x,ex.y-player.y)<ex.r){extracting=true;extractTimer=180}
+}
+
+// ---------- Enemies ----------
+const ETYPES=[
+ {n:'SCAV',hp:42,speed:1.35,dmg:7,rate:48,range:430,color:'#c96f4a',score:100,cash:[20,70]},
+ {n:'RUSHER',hp:28,speed:2.7,dmg:12,rate:30,range:38,color:'#ff5f5f',score:140,cash:[30,90]},
+ {n:'GUNNER',hp:75,speed:1.1,dmg:10,rate:22,range:620,color:'#7fb2ff',score:220,cash:[50,140]},
+ {n:'BRUTE',hp:180,speed:1.0,dmg:22,rate:55,range:70,color:'#b45cff',score:400,cash:[100,260]},
+ {n:'ANOMALY',hp:120,speed:2.0,dmg:14,rate:16,range:760,color:'#4dffc3',score:650,cash:[180,420]}
+];
+function spawnEnemy(type,x,y){
+  const t=ETYPES[type];
+  enemies.push({type,x,y,hp:t.hp*(1+.18*(map.diff-1)),maxhp:t.hp*(1+.18*(map.diff-1)),cool:Math.random()*60,angle:Math.random()*6.28,state:'patrol',tx:x,ty:y,hurt:0,flash:0});
+}
+function populate(){
+  const count=14+map.diff*7;
+  for(let i=0;i<count;i++){
+    const r=map.rooms[Math.floor(Math.random()*map.rooms.length)];
+    const x=r.x+30+Math.random()*(r.w-60),y=r.y+30+Math.random()*(r.h-60);
+    if(Math.hypot(x-player.x,y-player.y)<420)continue;
+    const roll=Math.random(),tier=map.diff;
+    let type=roll<.42?0:roll<.65?1:roll<.85?2:roll<.95?3:4;
+    if(tier===1&&type===4)type=3;
+    spawnEnemy(type,x,y);
+    if(Math.random()<.45)spawnLoot(x+(Math.random()-.5)*40,y+(Math.random()-.5)*40,tier);
+  }
+  for(let i=0;i<10+map.diff*4;i++){
+    const r=map.rooms[Math.floor(Math.random()*map.rooms.length)];
+    spawnLoot(r.x+30+Math.random()*(r.w-60),r.y+30+Math.random()*(r.h-60),map.diff);
+  }
+}
+
+// ---------- Combat ----------
+function shoot(){
+  const w=weapons[player.cur];
+  if(player.reload>0||player.mags[player.cur]<=0)return;
+  if(player.cool>0)return;
+  player.cool=w.rate;player.mags[player.cur]--;player.recoil=Math.min(14,player.recoil+w.recoil);
+  for(let i=0;i<w.pellets;i++){
+    const a=player.angle+(Math.random()-.5)*w.spread*(1+player.recoil*.03);
+    bullets.push({x:player.x+Math.cos(a)*16,y:player.y+Math.sin(a)*16,vx:Math.cos(a)*w.speed,vy:Math.sin(a)*w.speed,dmg:w.dmg,life:w.range/w.speed,own:'p',color:w.color});
+  }
+  player.flash=4;
+  for(let i=0;i<5;i++)particles.push({x:player.x+Math.cos(player.angle)*18,y:player.y+Math.sin(player.angle)*18,vx:Math.cos(player.angle)*3+Math.random()*2-1,vy:Math.sin(player.angle)*3+Math.random()*2-1,life:10,c:'#ffcf6b',r:2});
+}
+function damagePlayer(d){
+  if(player.armor>0){const abs=Math.min(player.armor,d*.6);player.armor-=abs;d-=abs}
+  player.hp-=d;player.hurt=12;
+  if(player.hp<=0)die();
+}
+function damageEnemy(e,d,a){
+  e.hp-=d;e.hurt=8;e.state='hunt';
+  for(let i=0;i<6;i++)particles.push({x:e.x,y:e.y,vx:Math.cos(a+Math.random()-.5)*4,vy:Math.sin(a+Math.random()-.5)*4,life:16,c:'#c22',r:2+Math.random()*2});
+  if(e.hp<=0)killEnemy(e);
+}
+function killEnemy(e){
+  const t=ETYPES[e.type];
+  for(let i=0;i<24;i++)particles.push({x:e.x,y:e.y,vx:(Math.random()-.5)*7,vy:(Math.random()-.5)*7,life:30+Math.random()*25,c:Math.random()<.6?'#a11':'#611',r:2+Math.random()*3});
+  decals.push({x:e.x,y:e.y,r:12+Math.random()*12,c:'rgba(120,10,10,.35)'});
+  const cash=Math.floor(t.cash[0]+Math.random()*(t.cash[1]-t.cash[0]));
+  player.cash+=cash;
+  floaters.push({x:e.x,y:e.y,text:'+'+cash+' ¤',c:'#ffd700',life:80});
+  log('ELIMINATED '+t.n+'  +'+cash+' ¤',t.color);
+  if(Math.random()<.55)spawnLoot(e.x,e.y,map.diff);
+  enemies.splice(enemies.indexOf(e),1);
+}
+function log(s,c='#9fb8c8'){
+  const el=document.getElementById('lootlog');
+  const d=document.createElement('div');d.textContent=s;d.style.color=c;d.style.marginBottom='3px';
+  el.prepend(d);while(el.children.length>7)el.lastChild.remove();
+}
+
+// ---------- Update ----------
+function update(){
+  if(state!=='raid'||paused)return;
+  raidTime--;
+  player.cool=Math.max(0,player.cool-1);
+  player.flash=Math.max(0,player.flash-1);
+  player.hurt=Math.max(0,player.hurt-1);
+  player.recoil*=.86;
+  if(player.reload>0){player.reload--;if(player.reload===0)finishReload()}
+  // movement
+  let dx=(keys.KeyD?1:0)-(keys.KeyA?1:0),dy=(keys.KeyS?1:0)-(keys.KeyW?1:0);
+  const len=Math.hypot(dx,dy)||1;
+  const sp=player.speed*(keys.ShiftLeft?player.sprint:1);
+  moveEntity(player,dx/len*sp,dy/len*sp);
+  player.angle=Math.atan2(mouse.y-H/2,mouse.x-W/2);
+  if(mouse.down){const w=weapons[player.cur];if(w.auto||!player.fired)shoot();player.fired=true}else player.fired=false;
+  // extraction
+  const ex=map.extract,near=Math.hypot(ex.x-player.x,ex.y-player.y)<ex.r;
+  if(extracting){
+    extractTimer--;
+    if(!near){extracting=false;extractTimer=0;log('EXTRACTION INTERRUPTED','#ff6b6b')}
+    else if(extractTimer<=0){extract();return}
+  }
+  // bullets
+  for(let i=bullets.length-1;i>=0;i--){
+    const b=bullets[i];b.x+=b.vx;b.y+=b.vy;b.life--;
+    let dead=b.life<=0||collide(b.x,b.y,2);
+    if(dead&&b.life>0)for(let j=0;j<4;j++)particles.push({x:b.x,y:b.y,vx:(Math.random()-.5)*3,vy:(Math.random()-.5)*3,life:9,c:'#889',r:1.5});
+    if(!dead&&b.own==='p'){
+      for(const e of enemies)if(Math.hypot(e.x-b.x,e.y-b.y)<16){damageEnemy(e,b.dmg,Math.atan2(b.vy,b.vx));dead=true;break}
+    }else if(!dead&&b.own==='e'&&Math.hypot(player.x-b.x,player.y-b.y)<14){damagePlayer(b.dmg);dead=true}
+    if(dead)bullets.splice(i,1);
+  }
+  // enemies
+  for(const e of enemies){
+    const t=ETYPES[e.type],d=Math.hypot(player.x-e.x,player.y-e.y);
+    e.hurt=Math.max(0,e.hurt-1);e.cool--;
+    const see=d<t.range&&lineOfSight(e.x,e.y,player.x,player.y);
+    if(see)e.state='combat';else if(e.state==='combat'&&d>t.range*1.4)e.state='patrol';
+    let tx=e.tx,ty=e.ty;
+    if(e.state==='combat'){
+      e.angle=Math.atan2(player.y-e.y,player.x-e.x);
+      const ideal=t.range*.55;
+      if(d>ideal){tx=player.x;ty=player.y}
+      else if(d<ideal*.6){tx=e.x-(player.x-e.x);ty=e.y-(player.y-e.y)}
+      else{const a=e.angle+Math.PI/2;tx=e.x+Math.cos(a)*80;ty=e.y+Math.sin(a)*80}
+      if(e.cool<=0&&see){
+        e.cool=t.rate;
+        const shots=e.type===4?3:1;
+        for(let s=0;s<shots;s++){
+          const a=e.angle+(Math.random()-.5)*.14;
+          bullets.push({x:e.x+Math.cos(a)*16,y:e.y+Math.sin(a)*16,vx:Math.cos(a)*12,vy:Math.sin(a)*12,dmg:t.dmg,life:t.range/12,own:'e',color:t.color});
+        }
+      }
+    }else{
+      if(Math.hypot(tx-e.x,ty-e.y)<25||Math.random()<.004){
+        const r=map.rooms[Math.floor(Math.random()*map.rooms.length)];
+        e.tx=r.x+30+Math.random()*(r.w-60);e.ty=r.y+30+Math.random()*(r.h-60);
+      }
+      e.angle=Math.atan2(ty-e.y,tx-e.x);
+    }
+    const a=Math.atan2(ty-e.y,tx-e.x);
+    moveEntity(e,Math.cos(a)*t.speed,Math.sin(a)*t.speed);
+    // melee
+    if(d<26&&e.cool<=0){e.cool=t.rate;damagePlayer(t.dmg)}
+  }
+  // particles
+  for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.x+=p.vx;p.y+=p.vy;p.vx*=.9;p.vy*=.9;p.life--;if(p.life<=0)particles.splice(i,1)}
+  for(let i=floaters.length-1;i>=0;i--){const f=floaters[i];f.y-=.5;f.life--;if(f.life<=0)floaters.splice(i,1)}
+  if(decals.length>220)decals.shift();
+}
+function lineOfSight(x1,y1,x2,y2){
+  const steps=Math.ceil(Math.hypot(x2-x1,y2-y1)/16);
+  for(let i=1;i<steps;i++){const x=x1+(x2-x1)*i/steps,y=y1+(y2-y1)*i/steps;if(collide(x,y,2))return false}
+  return true;
+}
+function extract(){
+  state='extracted';
+  const value=player.loot.reduce((s,l)=>s+l.v,0)+player.cash;
+  document.getElementById('menu').style.display='flex';
+  document.getElementById('menu').innerHTML=`<div class="card"><h1 style="color:#6ef58f">EXTRACTED</h1><h2>${map.name} secured.</h2>
+  <div style="font-size:20px;margin:14px 0">Recovered value: <b style="color:#ffd700">${value} ¤</b><br>Items secured: ${player.loot.length}</div>
+  <button onclick="location.reload()">RETURN TO STAGING</button></div>`;
+}
+function die(){
+  state='dead';
+  document.getElementById('menu').style.display='flex';
+  document.getElementById('menu').innerHTML=`<div class="card"><h1 style="color:#ff4d6d">KIA</h1><h2>${map.name} — all carried loot was lost.</h2>
+  <div style="font-size:18px;margin:14px 0">Hostiles eliminated: ${player.kills||0}</div>
+  <button onclick="location.reload()">DEPLOY AGAIN</button></div>`;
+}
+
+// ---------- Render ----------
+function draw(){
+  ctx.fillStyle='#05070a';ctx.fillRect(0,0,W,H);
+  if(!map)return;
+  const camx=player.x-W/2,camy=player.y-H/2;
+  ctx.save();ctx.translate(-camx,-camy);
+  // floor
+  const p=map.palette;
+  ctx.fillStyle=p[0];ctx.fillRect(0,0,map.w,map.h);
+  ctx.strokeStyle='rgba(255,255,255,.03)';ctx.lineWidth=1;
+  for(let x=0;x<map.w;x+=64){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,map.h);ctx.stroke()}
+  for(let y=0;y<map.h;y+=64){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(map.w,y);ctx.stroke()}
+  // rooms
+  for(const r of map.rooms){ctx.fillStyle=p[1];ctx.fillRect(r.x,r.y,r.w,r.h);ctx.strokeStyle=p[2];ctx.lineWidth=3;ctx.strokeRect(r.x,r.y,r.w,r.h)}
+  // decals
+  for(const d of decals){ctx.fillStyle=d.c;ctx.beginPath();ctx.arc(d.x,d.y,d.r,0,7);ctx.fill()}
+  // walls
+  for(const w of map.walls){
+    ctx.fillStyle='#151b21';ctx.fillRect(w.x,w.y,w.w,w.h);
+    ctx.fillStyle='#2c3844';ctx.fillRect(w.x,w.y,w.w,4);ctx.fillRect(w.x,w.y,4,w.h);
+    ctx.strokeStyle='#46586a';ctx.lineWidth=1;ctx.strokeRect(w.x,w.y,w.w,w.h);
+  }
+  // extraction
+  const ex=map.extract,pu=(Math.sin(Date.now()/200)+1)/2;
+  ctx.strokeStyle=`rgba(110,245,143,${.5+pu*.4})`;ctx.lineWidth=4;
+  ctx.beginPath();ctx.arc(ex.x,ex.y,ex.r,0,7);ctx.stroke();
+  ctx.fillStyle=`rgba(110,245,143,${.08+pu*.07})`;ctx.fill();
+  ctx.fillStyle='#6ef58f';ctx.font='bold 18px Consolas';ctx.textAlign='center';
+  ctx.fillText(extracting?('EXTRACTING '+Math.ceil(extractTimer/60)):'PRESS E TO EXTRACT',ex.x,ex.y-ex.r-12);
+  // loot
+  for(const l of loot){
+    l.bob+=.05;const yy=l.y+Math.sin(l.bob)*3;
+    ctx.fillStyle=l.type.c;ctx.globalAlpha=.25;ctx.beginPath();ctx.arc(l.x,yy,14,0,7);ctx.fill();ctx.globalAlpha=1;
+    ctx.fillRect(l.x-6,yy-6,12,12);ctx.fillStyle='#000';ctx.font='bold 11px Consolas';ctx.fillText(l.type.icon,l.x,yy+4);
+  }
+  // enemies
+  for(const e of enemies){
+    const t=ETYPES[e.type];
+    ctx.save();ctx.translate(e.x,e.y);ctx.rotate(e.angle);
+    ctx.fillStyle=e.hurt>0?'#fff':t.color;
+    ctx.beginPath();ctx.moveTo(16,0);ctx.lineTo(-10,10);ctx.lineTo(-6,0);ctx.lineTo(-10,-10);ctx.closePath();ctx.fill();
+    ctx.fillStyle='#000';ctx.fillRect(-3,-2,10,4);
+    ctx.restore();
+    // hp bar
+    ctx.fillStyle='rgba(0,0,0,.6)';ctx.fillRect(e.x-18,e.y-26,36,5);
+    ctx.fillStyle=t.color;ctx.fillRect(e.x-18,e.y-26,36*Math.max(0,e.hp/e.maxhp),5);
+    ctx.fillStyle='#dfe7ef';ctx.font='9px Consolas';ctx.textAlign='center';ctx.fillText(t.n,e.x,e.y-31);
+  }
+  // bullets
+  for(const b of bullets){
+    ctx.strokeStyle=b.color;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(b.x,b.y);ctx.lineTo(b.x-b.vx*1.6,b.y-b.vy*1.6);ctx.stroke();
+  }
+  // particles
+  for(const pa of particles){ctx.fillStyle=pa.c;ctx.globalAlpha=Math.min(1,pa.life/15);ctx.beginPath();ctx.arc(pa.x,pa.y,pa.r,0,7);ctx.fill()}
+  ctx.globalAlpha=1;
+  // player
+  ctx.save();ctx.translate(player.x,player.y);ctx.rotate(player.angle);
+  ctx.fillStyle=player.hurt>0?'#ff8080':'#7ee0ff';
+  ctx.beginPath();ctx.arc(0,0,player.r,0,7);ctx.fill();
+  ctx.fillStyle='#0b1117';ctx.fillRect(4,-3,16,6);
+  if(player.flash>0){ctx.fillStyle='rgba(255,230,150,.9)';ctx.beginPath();ctx.arc(24,0,8+Math.random()*5,0,7);ctx.fill()}
+  ctx.restore();
+  // floaters
+  for(const f of floaters){ctx.fillStyle=f.c;ctx.globalAlpha=Math.min(1,f.life/40);ctx.font='bold 13px Consolas';ctx.textAlign='center';ctx.fillText(f.text,f.x,f.y)}
+  ctx.globalAlpha=1;
+  ctx.restore();
+  // vignette + damage
+  const vg=ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*.35,W/2,H/2,Math.max(W,H)*.75);
+  vg.addColorStop(0,'rgba(0,0,0,0)');vg.addColorStop(1,'rgba(0,0,0,.75)');
+  ctx.fillStyle=vg;ctx.fillRect(0,0,W,H);
+  if(player.hurt>0){ctx.fillStyle=`rgba(255,0,0,${player.hurt/40})`;ctx.fillRect(0,0,W,H)}
+  if(extracting){ctx.strokeStyle='#6ef58f';ctx.lineWidth=8;ctx.strokeRect(4,4,W-8,H-8)}
+  drawMinimap();
+  updateHUD();
+}
+function drawMinimap(){
+  const s=170,pad=12,x=W-s-pad,y=pad;
+  ctx.fillStyle='rgba(8,12,16,.8)';ctx.fillRect(x,y,s,s);
+  ctx.strokeStyle='#2b3a48';ctx.strokeRect(x,y,s,s);
+  const k=s/map.w;
+  ctx.fillStyle='#39434c';
+  for(const w of map.walls)ctx.fillRect(x+w.x*k,y+w.y*k,Math.max(1,w.w*k),Math.max(1,w.h*k));
+  ctx.fillStyle='#6ef58f';ctx.beginPath();ctx.arc(x+map.extract.x*k,y+map.extract.y*k,4,0,7);ctx.fill();
+  ctx.fillStyle='#ff5f5f';
+  for(const e of enemies)ctx.fillRect(x+e.x*k-1,y+e.y*k-1,3,3);
+  ctx.fillStyle='#ffd166';
+  for(const l of loot)ctx.fillRect(x+l.x*k-1,y+l.y*k-1,2,2);
+  ctx.fillStyle='#7ee0ff';ctx.beginPath();ctx.arc(x+player.x*k,y+player.y*k,3.5,0,7);ctx.fill();
+}
+function updateHUD(){
+  const w=weapons[player.cur];
+  document.getElementById('hud').innerHTML=
+   `<b style="color:#7ee0ff">${map.name}</b><br>
+    HP ${Math.max(0,Math.ceil(player.hp))}/${player.maxhp} &nbsp;|&nbsp; ARMOR ${Math.ceil(player.armor)}<br>
+    ${w.name}: ${player.mags[player.cur]}/${w.mag} &nbsp; ${player.ammo[w.ammoType]||0} reserve ${player.reload>0?'<span style="color:#ffd166">RELOADING</span>':''}<br>
+    Medkits: ${player.heals||0} &nbsp;|&nbsp; Carry value: ${player.loot.reduce((s,l)=>s+l.v,0)} ¤ &nbsp;|&nbsp; Cash: ${player.cash} ¤`;
+  const mm=Math.floor(Math.max(0,raidTime)/3600),ss=Math.floor(Math.max(0,raidTime)/60)%60;
+  document.getElementById('topright').innerHTML=`<b style="color:${raidTime<3600?'#ff6b6b':'#dfe7ef'}">RAID ${mm}:${String(ss).padStart(2,'0')}</b><br>HOSTILES: ${enemies.length}<br>WEAPONS: ${player.weapons.map(i=>(i===player.cur?'['+weapons[i].name+']':weapons[i].name)).join(' ')}`;
+}
+
+// ---------- Start ----------
+function startRaid(i){
+  map=genWorld(MAPS[i]);map.diff=MAPS[i].diff;
+  player.x=map.spawn.x;player.y=map.spawn.y;player.hp=100;player.armor=25;
+  player.weapons=[0,1,2,3];player.cur=1;
+  player.mags=[12,32,6,20];player.ammo={'9mm':120,'12g':36,'556':100};
+  player.loot=[];player.cash=0;player.heals=2;player.kills=0;
+  raidTime=60*60*(4+map.diff); // 4-6 minutes
+  bullets.length=0;enemies.length=0;loot.length=0;particles.length=0;decals.length=0;floaters.length=0;
+  populate();state='raid';paused=false;
+  document.getElementById('menu').style.display='none';
+  document.getElementById('lootlog').innerHTML='';
+  log('DEPLOYED: '+MAPS[i].name,'#7ee0ff');
+  log('Find the green extraction zone.','#6ef58f');
+}
+const md=document.getElementById('maps');
+MAPS.forEach((m,i)=>{
+  const d=document.createElement('div');d.className='map';
+  d.innerHTML=`<b>${m.name}</b><div class="small">${m.desc}<br><br>Threat: ${'★'.repeat(m.diff)}${'☆'.repeat(3-m.diff)}<br>Raid: ${4+m.diff} min</div>`;
+  d.onclick=()=>startRaid(i);md.appendChild(d);
 });
-let currentTarget=null;
-const input={w:false,a:false,s:false,d:false,space:false,ctrl:false,shift:false,q:false,e:false};
-addEventListener('keydown',e=>{const k=e.key.toLowerCase();
- if(k==='w')input.w=true;if(k==='a')input.a=true;if(k==='s')input.s=true;if(k==='d')input.d=true;
- if(k===' '){input.space=true;e.preventDefault()}if(k==='control')input.ctrl=true;if(k==='shift')input.shift=true;
- if(k==='q')input.q=true;if(k==='e')input.e=true;
- if(k==='f'){state.flash=!state.flash;flashlight.intensity=state.flash?2.2:0}
- if(k==='r'){if(state.phase==='habitat'&&state.repairs<1){state.repairs=1;state.power=Math.min(100,state.power+20);brokenPower.active=false;brokenPower.mesh.material=mats.green;toast('Emergency repair complete.');objective('Board the shuttle at the habitat airlock.')}}
- if(k==='e'&&currentTarget&&currentTarget.active)currentTarget.onUse();
-});
-addEventListener('keyup',e=>{const k=e.key.toLowerCase();if(k==='w')input.w=false;if(k==='a')input.a=false;if(k==='s')input.s=false;if(k==='d')input.d=false;if(k===' ')input.space=false;if(k==='control')input.ctrl=false;if(k==='shift')input.shift=false;if(k==='q')input.q=false;if(k==='e')input.e=false});
-document.getElementById('play').onclick=()=>{document.getElementById('start').style.display='none';canvas.focus();if(!document.pointerLockElement)canvas.requestPointerLock();toast('Habitat systems failing. Repair the power conduit.')};
-canvas.addEventListener('click',()=>{if(document.getElementById('start').style.display==='none'&&!document.pointerLockElement)canvas.requestPointerLock()});
-engine.runRenderLoop(()=>scene.render());
-addEventListener('resize',()=>engine.resize());
+function loop(){update();draw();requestAnimationFrame(loop)}
+loop();
 </script>
 </body>
 </html>
